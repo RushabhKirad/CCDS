@@ -27,17 +27,6 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     });
 });
 
-// Scroll to section function
-function scrollToSection(sectionId) {
-    const section = document.getElementById(sectionId);
-    if (section) {
-        section.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-        });
-    }
-}
-
 // Password Toggle Function
 function togglePassword(inputId) {
     const input = document.getElementById(inputId);
@@ -58,19 +47,14 @@ function togglePassword(inputId) {
 // Password Strength Checker
 function checkPasswordStrength(password) {
     let score = 0;
-    let feedback = '';
     
-    // Length check
     if (password.length >= 8) score += 1;
     if (password.length >= 12) score += 1;
-    
-    // Character variety checks
     if (/[a-z]/.test(password)) score += 1;
     if (/[A-Z]/.test(password)) score += 1;
     if (/[0-9]/.test(password)) score += 1;
     if (/[^A-Za-z0-9]/.test(password)) score += 1;
     
-    // Determine strength
     if (score < 3) {
         return { strength: 'weak', message: '🔴 Weak - Add uppercase, numbers, and symbols' };
     } else if (score < 4) {
@@ -82,17 +66,10 @@ function checkPasswordStrength(password) {
     }
 }
 
-// Email validation - Allow only legitimate providers
+// Email validation
 const allowedEmailProviders = [
     'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'live.com',
     'icloud.com', 'protonmail.com', 'zoho.com', 'aol.com'
-];
-
-const tempEmailProviders = [
-    '10minutemail.com', 'tempmail.org', 'guerrillamail.com', 'mailinator.com',
-    'temp-mail.org', 'throwaway.email', 'getnada.com', 'maildrop.cc',
-    'yopmail.com', 'sharklasers.com', 'guerrillamailblock.com', 'pokemail.net',
-    'spam4.me', 'bccto.me', 'chacuo.net', 'dispostable.com', 'fakeinbox.com'
 ];
 
 function validateEmail(email) {
@@ -104,48 +81,11 @@ function validateEmail(email) {
     
     const domain = email.split('@')[1].toLowerCase();
     
-    // Check if it's a temporary email provider
-    if (tempEmailProviders.includes(domain)) {
-        return { valid: false, message: 'Temporary email addresses are not allowed. Please use a permanent email.' };
-    }
-    
-    // Check if it's an allowed provider
     if (!allowedEmailProviders.includes(domain)) {
         return { valid: false, message: 'Please use a valid email provider (Gmail, Yahoo, Outlook, etc.).' };
     }
     
     return { valid: true };
-}
-
-// Clear form fields
-function clearForm(formId) {
-    const form = document.getElementById(formId);
-    form.reset();
-    
-    // Clear password strength indicator
-    const strengthDiv = document.getElementById('passwordStrength');
-    if (strengthDiv) {
-        strengthDiv.style.display = 'none';
-        strengthDiv.className = 'password-strength';
-    }
-    
-    // Reset input border colors
-    form.querySelectorAll('input').forEach(input => {
-        input.style.borderColor = 'rgba(0, 255, 255, 0.3)';
-    });
-    
-    // Reset password toggles to hidden state
-    form.querySelectorAll('input[type="text"]').forEach(input => {
-        if (input.id.includes('Password')) {
-            input.type = 'password';
-            const toggle = input.nextElementSibling;
-            if (toggle && toggle.classList.contains('password-toggle')) {
-                const icon = toggle.querySelector('i');
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
-            }
-        }
-    });
 }
 
 // Authentication Functions
@@ -163,12 +103,19 @@ function closeModal(modalId) {
     document.getElementById(modalId).classList.add('hidden');
     document.body.style.overflow = 'auto';
     clearMessages();
+    clearFormData(modalId);
+}
+
+function clearFormData(modalId) {
+    const modal = document.getElementById(modalId);
+    const inputs = modal.querySelectorAll('input');
+    inputs.forEach(input => input.value = '');
     
-    // Clear form fields when closing
-    if (modalId === 'signupModal') {
-        clearForm('signupForm');
-    } else if (modalId === 'loginModal') {
-        clearForm('loginForm');
+    // Clear password strength indicator
+    const strengthDiv = document.getElementById('passwordStrength');
+    if (strengthDiv) {
+        strengthDiv.style.display = 'none';
+        strengthDiv.textContent = '';
     }
 }
 
@@ -196,8 +143,6 @@ function clearMessages() {
     document.querySelectorAll('.message').forEach(msg => msg.remove());
 }
 
-// Simple user storage (in real app, use backend)
-const users = JSON.parse(localStorage.getItem('cyberDefenseUsers') || '[]');
 let currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
 
 // Login Form Handler
@@ -206,6 +151,12 @@ async function handleLogin(e) {
     
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
+    const submitBtn = e.target.querySelector('.auth-submit-btn');
+    const originalText = submitBtn.textContent;
+    
+    // Add loading state
+    submitBtn.textContent = 'Logging in...';
+    submitBtn.disabled = true;
     
     try {
         const response = await fetch('http://localhost:5000/api/login', {
@@ -219,6 +170,7 @@ async function handleLogin(e) {
         if (result.success) {
             currentUser = result.user;
             localStorage.setItem('currentUser', JSON.stringify(result.user));
+            localStorage.setItem('authToken', result.token);
             showMessage('Login successful! Welcome back.', 'success', 'loginForm');
             
             setTimeout(() => {
@@ -230,17 +182,23 @@ async function handleLogin(e) {
         }
     } catch (error) {
         showMessage('Connection error. Please try again.', 'error', 'loginForm');
+    } finally {
+        // Reset button state
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
     }
 }
 
 // Signup Form Handler
-document.getElementById('signupForm').addEventListener('submit', async function(e) {
+async function handleSignup(e) {
     e.preventDefault();
     
     const name = document.getElementById('signupName').value;
     const email = document.getElementById('signupEmail').value;
     const password = document.getElementById('signupPassword').value;
     const confirmPassword = document.getElementById('signupConfirmPassword').value;
+    const submitBtn = e.target.querySelector('.auth-submit-btn');
+    const originalText = submitBtn.textContent;
     
     // Email validation
     const emailValidation = validateEmail(email);
@@ -266,6 +224,10 @@ document.getElementById('signupForm').addEventListener('submit', async function(
         return;
     }
     
+    // Add loading state
+    submitBtn.textContent = 'Creating Account...';
+    submitBtn.disabled = true;
+    
     try {
         const response = await fetch('http://localhost:5000/api/register', {
             method: 'POST',
@@ -287,23 +249,14 @@ document.getElementById('signupForm').addEventListener('submit', async function(
         }
     } catch (error) {
         showMessage('Connection error. Please try again.', 'error', 'signupForm');
+    } finally {
+        // Reset button state
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
     }
-});
+}
 
-// Real-time email validation for signup
-document.getElementById('signupEmail').addEventListener('blur', function() {
-    const email = this.value;
-    if (email) {
-        const validation = validateEmail(email);
-        if (!validation.valid) {
-            this.style.borderColor = '#ff4444';
-            showMessage(validation.message, 'error', 'signupForm');
-        } else {
-            this.style.borderColor = '#00ff7f';
-            clearMessages();
-        }
-    }
-});
+
 
 // Real-time password strength checking
 document.getElementById('signupPassword').addEventListener('input', function() {
@@ -325,8 +278,9 @@ function updateAuthUI() {
     const authButtons = document.querySelector('.auth-buttons');
     
     if (currentUser) {
+        const firstName = currentUser.name.split(' ')[0];
         authButtons.innerHTML = `
-            <span class="user-welcome">Welcome, ${currentUser.name}</span>
+            <span class="user-welcome">Welcome, ${firstName}</span>
             <button class="logout-btn" onclick="logout()">Logout</button>
         `;
     } else {
@@ -340,6 +294,7 @@ function updateAuthUI() {
 function logout() {
     currentUser = null;
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('authToken');
     updateAuthUI();
     showNotification('Logged out successfully!');
 }
@@ -378,196 +333,41 @@ document.querySelectorAll('.modal').forEach(modal => {
     });
 });
 
-// Close modals on Escape key
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        document.querySelectorAll('.modal:not(.hidden)').forEach(modal => {
-            closeModal(modal.id);
-        });
-        closeModule();
-    }
-});
-
-// Module URLs
-const MODULE_URLS = {
-    anomaly: '../anomaly-dashboard/index.html',
-    phishing: '../phishing-dashboard/index.html', 
-    insider: '../insider-dashboard/index.html'
-};
-
-function loadModule(moduleType) {
+// Module Loading Function
+function loadModule(moduleName) {
     if (!currentUser) {
-        showNotification('Please login to access the dashboard');
+        showNotification('Please login to access this module');
         openLoginModal();
         return;
     }
     
-    if (moduleType === 'anomaly') {
-        // Open anomaly dashboard in new tab
-        window.open(MODULE_URLS[moduleType], '_blank');
-    } else if (moduleType === 'phishing' || moduleType === 'insider') {
-        showNotification(`${moduleType.charAt(0).toUpperCase() + moduleType.slice(1)} module is under development by the team`);
-    } else {
-        showNotification(`${moduleType} module is under development`);
+    switch(moduleName) {
+        case 'anomaly':
+            showNotification('Redirecting to Anomaly Detection Dashboard...');
+            // Here you would redirect to the anomaly detection module
+            setTimeout(() => {
+                window.location.href = '../anomaly-detection/dashboard.html';
+            }, 1000);
+            break;
+        default:
+            showNotification('Module coming soon!');
     }
 }
-
-function closeModule() {
-    document.getElementById('module-container').classList.add('hidden');
-}
-
-// Close module on background click
-document.getElementById('module-container').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeModule();
-    }
-});
-
-// Navbar scroll effect
-window.addEventListener('scroll', () => {
-    const navbar = document.querySelector('.navbar');
-    if (window.scrollY > 100) {
-        navbar.style.background = 'rgba(0, 0, 0, 0.4)';
-    } else {
-        navbar.style.background = 'rgba(0, 0, 0, 0.2)';
-    }
-});
-
-// Intersection Observer for animations
-const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            entry.target.style.opacity = '1';
-            entry.target.style.transform = 'translateY(0)';
-        }
-    });
-}, {
-    threshold: 0.1
-});
-
-// Observe all cards for animation
-document.querySelectorAll('.feature-card, .analytics-card, .why-card, .team-member').forEach(card => {
-    card.style.opacity = '0';
-    card.style.transform = 'translateY(20px)';
-    card.style.transition = 'all 0.6s ease';
-    observer.observe(card);
-});
-
-// Counter animation for metrics
-function animateCounter(element, target, suffix = '') {
-    let current = 0;
-    const increment = target / 100;
-    const timer = setInterval(() => {
-        current += increment;
-        if (current >= target) {
-            element.textContent = target + suffix;
-            clearInterval(timer);
-        } else {
-            element.textContent = Math.floor(current) + suffix;
-        }
-    }, 20);
-}
-
-// Animate counters when they come into view
-const counterObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            const metric = entry.target.querySelector('.metric');
-            const statNumber = entry.target.querySelector('.stat-number');
-            
-            if (metric) {
-                const text = metric.textContent;
-                if (text.includes('%')) {
-                    animateCounter(metric, parseInt(text), '%');
-                } else if (text.includes('s')) {
-                    metric.textContent = '0.3s';
-                } else {
-                    animateCounter(metric, parseInt(text));
-                }
-            }
-            
-            if (statNumber) {
-                const text = statNumber.textContent;
-                if (text.includes('%')) {
-                    animateCounter(statNumber, parseFloat(text), '%');
-                } else if (!isNaN(parseInt(text))) {
-                    animateCounter(statNumber, parseInt(text));
-                }
-            }
-        }
-    });
-}, { threshold: 0.5 });
-
-// Observe analytics cards and stats
-document.querySelectorAll('.analytics-card, .stat').forEach(card => {
-    counterObserver.observe(card);
-});
-
-// Particle animation for background
-function createParticle() {
-    const particle = document.createElement('div');
-    particle.style.position = 'fixed';
-    particle.style.width = '2px';
-    particle.style.height = '2px';
-    particle.style.background = '#00ffff';
-    particle.style.borderRadius = '50%';
-    particle.style.pointerEvents = 'none';
-    particle.style.zIndex = '-1';
-    particle.style.left = Math.random() * window.innerWidth + 'px';
-    particle.style.top = window.innerHeight + 'px';
-    particle.style.opacity = Math.random();
-    
-    document.body.appendChild(particle);
-    
-    const animation = particle.animate([
-        { transform: 'translateY(0px)', opacity: particle.style.opacity },
-        { transform: `translateY(-${window.innerHeight + 100}px)`, opacity: 0 }
-    ], {
-        duration: Math.random() * 3000 + 2000,
-        easing: 'linear'
-    });
-    
-    animation.onfinish = () => particle.remove();
-}
-
-// Create particles periodically
-setInterval(createParticle, 300);
-
-// Add CSS animations
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-    }
-    
-    @keyframes slideOut {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(100%); opacity: 0; }
-    }
-    
-    .user-welcome {
-        color: #00ff7f;
-        font-weight: 500;
-        margin-right: 1rem;
-    }
-    
-    .logout-btn {
-        padding: 0.5rem 1.5rem;
-        background: transparent;
-        color: #ff4444;
-        border: 1px solid #ff4444;
-        border-radius: 25px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-    
-    .logout-btn:hover {
-        background: #ff4444;
-        color: white;
-    }
-`;
-document.head.appendChild(style);
 
 // Initialize auth UI on page load
 document.addEventListener('DOMContentLoaded', updateAuthUI);
+
+// Sparkle Animation
+function createSparkle() {
+    const sparkle = document.createElement('div');
+    sparkle.className = 'sparkle';
+    sparkle.style.left = Math.random() * 100 + '%';
+    sparkle.style.animationDelay = Math.random() * 3 + 's';
+    document.querySelector('.sparkles').appendChild(sparkle);
+    
+    setTimeout(() => {
+        sparkle.remove();
+    }, 2500);
+}
+
+setInterval(createSparkle, 150);

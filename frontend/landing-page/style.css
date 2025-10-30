@@ -112,14 +112,13 @@ body {
 }
 
 .login-btn {
-    background: transparent;
-    color: white;
-    border: 1px solid #00ffff;
+    background: linear-gradient(45deg, #00ffff, #00ff7f);
+    color: #0a0a0a;
 }
 
 .login-btn:hover {
-    background: #00ffff;
-    color: #0a0a0a;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 255, 255, 0.3);
 }
 
 .signup-btn {
@@ -130,6 +129,28 @@ body {
 .signup-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(0, 255, 255, 0.3);
+}
+
+.user-welcome {
+    color: #00ff7f;
+    font-weight: 500;
+    margin-right: 1rem;
+}
+
+.logout-btn {
+    padding: 0.5rem 1.5rem !important;
+    border: none !important;
+    border-radius: 25px !important;
+    background: linear-gradient(45deg, #00ffff, #00ff7f) !important;
+    color: #0a0a0a !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    font-weight: 500 !important;
+}
+
+.logout-btn:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 5px 15px rgba(0, 255, 255, 0.3) !important;
 }
 
 .hamburger {
@@ -165,6 +186,15 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     animation: fadeInUp 1s ease;
+}
+
+.subtitle-text {
+    font-size: 2.5rem;
+    display: block;
+    margin-top: 0.5rem;
+    background: linear-gradient(45deg, #00ff7f, #00ffff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 .hero-subtitle {
@@ -323,20 +353,36 @@ body {
 }
 
 /* Why Section */
+.why-section {
+    padding: 1.5rem 2rem;
+}
+
 .why-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
 }
 
 .why-card {
     background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(10px);
-    border-radius: 15px;
-    padding: 2rem;
+    border-radius: 12px;
+    padding: 1rem;
     text-align: center;
     border: 1px solid rgba(0, 255, 255, 0.2);
     transition: all 0.3s ease;
+}
+
+.why-card h3 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: #00ff7f;
+}
+
+.why-card p {
+    font-size: 0.85rem;
+    line-height: 1.3;
+    opacity: 0.9;
 }
 
 .why-card:hover {
@@ -345,9 +391,9 @@ body {
 }
 
 .why-icon {
-    font-size: 3rem;
+    font-size: 2.5rem;
     color: #00ff7f;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
 }
 
 
@@ -387,6 +433,25 @@ body {
     font-size: 0.9rem;
     opacity: 0.8;
     margin-top: 0.5rem;
+}
+
+/* Decorative short centered underline for specific member names */
+.underline-centered {
+    position: relative;
+    display: inline-block;    /* shrink to text width */
+    padding-bottom: 15px;      /* space above the line */
+    margin-bottom: 8px;       /* space below the line */
+}
+.underline-centered::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 2px;            /* distance of the line below the text */
+    width: 120%;              /* underline length relative to the text box */
+    height: 4px;             /* thickness */
+    background: linear-gradient(90deg, #00ffff, #00ff7f);
+    border-radius: 3px;
 }
 
 /* Contact Section */
@@ -487,6 +552,58 @@ body {
 
 .hidden {
     display: none;
+}
+
+/* Sparkle Animation */
+.sparkles {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.sparkle {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: rgba(0, 255, 255, 0.4);
+    border-radius: 50%;
+    animation: sparkle 1.5s linear infinite;
+    box-shadow: 0 0 3px rgba(0, 255, 255, 0.3);
+}
+
+.sparkle:nth-child(2n) {
+    background: rgba(0, 255, 127, 0.4);
+    box-shadow: 0 0 3px rgba(0, 255, 127, 0.3);
+    animation-duration: 2s;
+}
+
+.sparkle:nth-child(3n) {
+    background: rgba(0, 200, 255, 0.3);
+    box-shadow: 0 0 2px rgba(0, 200, 255, 0.2);
+    animation-duration: 1.2s;
+}
+
+@keyframes sparkle {
+    0% {
+        transform: translateY(100vh) scale(0);
+        opacity: 1;
+    }
+    10% {
+        opacity: 1;
+        transform: translateY(90vh) scale(1);
+    }
+    90% {
+        opacity: 1;
+        transform: translateY(10vh) scale(1);
+    }
+    100% {
+        transform: translateY(-10vh) scale(0);
+        opacity: 0;
+    }
 }
 
 /* Mobile Responsive */

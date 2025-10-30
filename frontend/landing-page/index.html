@@ -9,6 +9,7 @@
 </head>
 <body>
     <div class="animated-bg"></div>
+    <div class="sparkles"></div>
     
     <nav class="navbar">
         <div class="nav-brand">
@@ -35,22 +36,21 @@
 
     <section id="home" class="hero">
         <div class="hero-content">
-            <h1>Cognitive Cyber Defense System: AI-Driven. Quantum-Secure.</h1>
-            <p class="hero-subtitle">The integrated defense platform built to defeat today's threats and future quantum attacks.</p>
-            <p>Defend your digital frontier with multi-layered machine learning and Post-Quantum Cryptography (PQC) designed for true long-term data security.</p>
+            <h1>Cognitive Cyber Defense System<br><span class="subtitle-text">AI-Driven Security</span></h1>
+            <p class="hero-subtitle">The integrated defense platform built to defeat today's advanced cyber threats.</p>
+            <p>Defend your digital frontier with multi-layered machine learning designed for comprehensive threat detection and response.</p>
             <p>Join us in shaping the future of cybersecurity.</p>
         </div>
     </section>
 
     <section id="features" class="features-section">
-        <h2>The Four Pillars of Future-Ready Defense</h2>
+        <h2>The Three Pillars of AI-Driven Defense</h2>
         <div class="features-grid">
             <div class="feature-card" onclick="loadModule('anomaly')">
                 <div class="card-icon"><i class="fas fa-search"></i></div>
                 <h3>Real-Time Traffic Anomaly</h3>
                 <p>Identifies and flags unusual system behavior, data access, or network traffic deviations, leveraging ML to detect zero-day attacks and compromised user accounts.</p>
                 <button class="explore-btn">Explore →</button>
-                <div class="developer">By: Samyak</div>
             </div>
 
             <div class="feature-card">
@@ -58,7 +58,6 @@
                 <h3>Advanced Phishing & URL Analysis</h3>
                 <p>Utilizes NLP and computer vision to determine the authenticity of communication and web pages, actively protecting users from sophisticated email lures.</p>
                 <button class="explore-btn disabled">🔄 In Development</button>
-                <div class="developer">By: Rushabh</div>
             </div>
 
             <div class="feature-card">
@@ -66,15 +65,6 @@
                 <h3>User Behavior Risk Monitoring</h3>
                 <p>Monitors user activity for patterns indicative of data exfiltration or privilege misuse, stopping breaches before they happen through continuous behavioral analysis.</p>
                 <button class="explore-btn disabled">🔄 In Development</button>
-                <div class="developer">By: Riddhi</div>
-            </div>
-
-            <div class="feature-card quantum-card">
-                <div class="card-icon"><i class="fas fa-atom"></i></div>
-                <h3>Post-Quantum Secure Core</h3>
-                <p>Ensures all sensitive system data, logs, and communication between models are protected with quantum-resistant algorithms (e.g., CRYSTALS-Kyber), guaranteeing long-term confidentiality.</p>
-                <button class="explore-btn quantum">🔮 Quantum-Ready</button>
-                <div class="developer">PQC Layer</div>
             </div>
         </div>
     </section>
@@ -85,17 +75,37 @@
             <div class="why-card">
                 <div class="why-icon"><i class="fas fa-brain"></i></div>
                 <h3>🚀 AI-Powered Decision Making</h3>
-                <p>Advanced machine learning algorithms that adapt and learn from threats in real-time</p>
+                <p>Advanced machine learning algorithms that adapt and learn from threats in real-time, providing proactive defense rather than reactive responses.</p>
             </div>
-            <div class="why-card">
-                <div class="why-icon"><i class="fas fa-lock"></i></div>
-                <h3>🔐 Post-Quantum Secure Communication</h3>
-                <p>Future-proof encryption methods resistant to quantum computing attacks using CRYSTALS-Kyber</p>
-            </div>
+
             <div class="why-card">
                 <div class="why-icon"><i class="fas fa-chart-line"></i></div>
-                <h3>📊 Real-time Monitoring and Alerts</h3>
-                <p>Instant threat detection with immediate response capabilities across all defense layers</p>
+                <h3>📊 Real-time Monitoring & Alerts</h3>
+                <p>Continuous monitoring with instant alerts for anomalies across network, system, and user activities—keeping you ahead of cyber threats.</p>
+            </div>
+
+            <div class="why-card">
+                <div class="why-icon"><i class="fas fa-shield-alt"></i></div>
+                <h3>🛡️ Multi-Layered Defense</h3>
+                <p>Combines network traffic analysis, phishing detection, and user behavior monitoring to cover all attack vectors.</p>
+            </div>
+
+            <div class="why-card">
+                <div class="why-icon"><i class="fas fa-user-lock"></i></div>
+                <h3>🔒 Insider Threat Prevention</h3>
+                <p>Detects unusual user behavior patterns and prevents data leaks or privilege misuse before damage occurs.</p>
+            </div>
+
+            <div class="why-card">
+                <div class="why-icon"><i class="fas fa-robot"></i></div>
+                <h3>🤖 Automated Response</h3>
+                <p>Smart AI modules take immediate mitigation actions when threats are detected, reducing human dependency for rapid response.</p>
+            </div>
+
+            <div class="why-card">
+                <div class="why-icon"><i class="fas fa-globe"></i></div>
+                <h3>🌐 Comprehensive Threat Coverage</h3>
+                <p>Protects endpoints, network traffic, emails, and URLs using AI-driven anomaly detection and predictive analytics.</p>
             </div>
         </div>
     </section>
@@ -107,47 +117,49 @@
         <div class="team-grid">
             <div class="team-member">
                 <div class="member-avatar">S</div>
-                <h4>Samyak</h4>
-                <p>Anomaly Detection Specialist</p>
-                <p class="member-description">ML engineer focused on real-time traffic analysis and behavioral anomaly detection systems.</p>
+                <h4 class="underline-centered">Samyak Bhongade</h4>
+                <p></p>
+                <p>Developed Anomaly Detection System</p>
             </div>
             <div class="team-member">
                 <div class="member-avatar">R</div>
-                <h4>Rushabh</h4>
-                <p>Phishing Detection Expert</p>
-                <p class="member-description">NLP specialist developing advanced email and URL analysis for phishing prevention.</p>
+                <h4 class="underline-centered">Rushabh Kirad</h4>
+                <br>
+                <p>Developed Phishing Detection System</p>
             </div>
             <div class="team-member">
                 <div class="member-avatar">R</div>
-                <h4>Riddhi</h4>
-                <p>Insider Threat Analyst</p>
-                <p class="member-description">Security researcher specializing in user behavior analysis and data exfiltration prevention.</p>
+                <h4 class="underline-centered">Riddhi Sathe</h4>
+                <br>
+                <p>Developed Insider Threat Detection System</p>
             </div>
         </div>
     </section>
 
     <section id="contact" class="contact-section">
-        <h2>Get In Touch with the Project</h2>
+        <h2>Get In Touch with Cognitive Cyber Defense System</h2>
         <div class="contact-content">
             <p>Interested in our cognitive cyber defense solutions?</p>
             <div class="contact-links">
-                <a href="https://github.com/samyak/cognitive-cyber-defense" class="contact-link">
+                <a href="https://github.com/SamyakBhongade/Cognitive-Cyber-Defense-System" class="contact-link" target="_blank">
                     <i class="fab fa-github"></i> View on GitHub
                 </a>
-                <a href="mailto:team@cyberdefense.ai" class="contact-link">
+                <a href="#footer" class="contact-link">
                     <i class="fas fa-envelope"></i> Contact Us
                 </a>
             </div>
         </div>
     </section>
 
-    <footer class="footer">
+    <footer id="footer" class="footer">
         <div class="footer-content">
             <p>Developed by <strong>Samyak</strong>, <strong>Rushabh</strong> & <strong>Riddhi</strong></p>
             <p class="disclaimer">This is a research project demo for educational purposes.</p>
             <div class="footer-links">
-                <a href="https://github.com/samyak/cognitive-cyber-defense">GitHub</a>
-                <a href="mailto:team@cyberdefense.ai">Contact</a>
+                <a href="https://github.com/SamyakBhongade/Cognitive-Cyber-Defense-System" target="_blank">GitHub</a>
+                <a href="https://www.linkedin.com/in/samyakbhongade/" target="_blank">Samyak LinkedIn</a>
+                <a href="https://www.linkedin.com/in/rushabh-kirad" target="_blank">Rushabh LinkedIn</a>
+                <a href="https://www.linkedin.com/in/riddhi-sathe" target="_blank">Riddhi LinkedIn</a>
             </div>
         </div>
     </footer>
@@ -182,7 +194,7 @@
         <div class="modal-content">
             <span class="close" onclick="closeModal('signupModal')">&times;</span>
             <h2><i class="fas fa-user-plus"></i> Sign Up</h2>
-            <form id="signupForm">
+            <form id="signupForm" onsubmit="handleSignup(event)">
                 <div class="form-group">
                     <label for="signupName">Full Name</label>
                     <input type="text" id="signupName" required>
@@ -199,7 +211,7 @@
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
-                    <div class="password-strength" id="passwordStrength"></div>
+                    <div id="passwordStrength" class="password-strength"></div>
                 </div>
                 <div class="form-group">
                     <label for="signupConfirmPassword">Confirm Password</label>
