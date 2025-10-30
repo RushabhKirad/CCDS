@@ -409,6 +409,10 @@ body {
     text-align: center;
     padding: 2rem;
     transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
 }
 
 .team-member:hover {
@@ -416,17 +420,71 @@ body {
 }
 
 .member-avatar {
-    width: 80px;
-    height: 80px;
+    width: 120px;
+    height: 120px;
     border-radius: 50%;
-    background: linear-gradient(45deg, #00ffff, #00ff7f);
+    object-fit: cover;
+    position: relative;
+    z-index: 2; /* place above the decorative ring */
+    display: block;
+}
+
+.member-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Avatar wrapper creates decorative ring/edge around the circular image */
+.avatar-wrap {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2rem;
-    font-weight: bold;
-    margin: 0 auto 1rem;
-    color: #0a0a0a;
+}
+
+.avatar-wrap::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    padding: 4px; /* ring thickness */
+    background: conic-gradient(from 0deg, #00ffff, #00ff7f, #7f00ff, #00ffff);
+    filter: blur(6px);
+    opacity: 0.9;
+    transition: transform 400ms ease, filter 400ms ease, opacity 400ms ease;
+    z-index: 0;
+}
+
+/* inner mask to keep ring outside the image area (optional soft edge) */
+.avatar-wrap::after {
+    content: "";
+    position: absolute;
+    inset: 6px; /* creates the hollow center where the image sits */
+    border-radius: 50%;
+    background: rgba(10,10,10,0.0);
+    z-index: 1;
+}
+
+.avatar-wrap:hover::before {
+    transform: scale(1.06) rotate(8deg);
+    filter: blur(4px);
+    opacity: 1;
+}
+
+/* subtle lift on hover */
+.team-member:hover .avatar-wrap {
+    transform: translateY(-6px);
+}
+
+/* accessible focus styles */
+.avatar-wrap:focus-within::before {
+    box-shadow: 0 0 12px rgba(0,255,255,0.25);
+    transform: scale(1.06);
 }
 
 .member-description {
