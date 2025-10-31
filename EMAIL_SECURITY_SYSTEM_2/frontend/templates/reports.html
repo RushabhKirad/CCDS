@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Security Reports{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Statistics Cards -->
+    <div class="col-md-3 mb-4">
+        <div class="card text-center bg-primary text-white">
+            <div class="card-body">
+                <h2 class="card-title">{{ stats.total_emails }}</h2>
+                <p class="card-text">Total Emails</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card text-center bg-success text-white">
+            <div class="card-body">
+                <h2 class="card-title">{{ stats.safe_count }}</h2>
+                <p class="card-text">Safe Emails</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card text-center bg-danger text-white">
+            <div class="card-body">
+                <h2 class="card-title">{{ stats.phishing_count }}</h2>
+                <p class="card-text">Phishing Detected</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card text-center bg-info text-white">
+            <div class="card-body">
+                <h2 class="card-title">{{ stats.model_accuracy }}%</h2>
+                <p class="card-text">AI Accuracy</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Big Pie Chart -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Email Classification Distribution</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="emailPieChart" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Security Insights -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Security Insights</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h6>Threat Detection Rate</h6>
+                    <div class="progress">
+                        <div class="progress-bar bg-danger" style="width: {{ (stats.phishing_count / stats.total_emails * 100) if stats.total_emails > 0 else 0 }}%"></div>
+                    </div>
+                    <small class="text-muted">{{ "%.1f" | format((stats.phishing_count / stats.total_emails * 100) if stats.total_emails > 0 else 0) }}% of emails flagged as threats</small>
+                </div>
+                
+                <div class="mb-3">
+                    <h6>Safety Score</h6>
+                    <div class="progress">
+                        <div class="progress-bar bg-success" style="width: {{ (stats.safe_count / stats.total_emails * 100) if stats.total_emails > 0 else 0 }}%"></div>
+                    </div>
+                    <small class="text-muted">{{ "%.1f" | format((stats.safe_count / stats.total_emails * 100) if stats.total_emails > 0 else 0) }}% of emails are safe</small>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>AI Protection:</strong> Your emails are continuously monitored by advanced machine learning models with {{ stats.model_accuracy }}% accuracy.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const ctx = document.getElementById('emailPieChart').getContext('2d');
+const emailChart = new Chart(ctx, {
+    type: 'pie',
+    data: {
+        labels: ['Safe Emails', 'Phishing Threats', 'Pending Analysis'],
+        datasets: [{
+            data: [{{ stats.safe_count }}, {{ stats.phishing_count }}, {{ stats.total_emails - stats.safe_count - stats.phishing_count }}],
+            backgroundColor: [
+                '#28a745',  // Green for safe
+                '#dc3545',  // Red for phishing
+                '#ffc107'   // Yellow for pending
+            ],
+            borderWidth: 3,
+            borderColor: '#fff'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    padding: 20,
+                    font: {
+                        size: 14
+                    }
+                }
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = ((context.parsed / total) * 100).toFixed(1);
+                        return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                    }
+                }
+            }
+        }
+    }
+});
+</script>
+
+<style>
+.card {
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+#emailPieChart {
+    max-height: 400px;
+}
+
+.progress {
+    height: 8px;
+    border-radius: 10px;
+}
+</style>
+{% endblock %}

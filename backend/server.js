@@ -5,7 +5,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-const PORT = 5000;
+const PORT = 3000;
 
 // Middleware
 app.use(cors());
@@ -15,7 +15,7 @@ app.use(express.json());
 const dbConnection = mysql.createConnection({
     host: 'localhost',
     user: 'root',
-    password: 'Samyak@04'
+    password: 'samarth@2904'
 });
 
 // Create database if not exists
@@ -32,7 +32,7 @@ dbConnection.query('CREATE DATABASE IF NOT EXISTS cyber_defense_db', (err) => {
 const db = mysql.createConnection({
     host: 'localhost',
     user: 'root',
-    password: 'Samyak@04',
+    password: 'samarth@2904',
     database: 'cyber_defense_db'
 });
 

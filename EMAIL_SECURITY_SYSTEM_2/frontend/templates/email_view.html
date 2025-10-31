@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}{{ email.subject or 'Email Details' }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Back Button -->
+        <div class="mb-4">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg" style="font-size: 16px; padding: 12px 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <i class="fas fa-arrow-left me-2"></i>Back to Inbox
+            </a>
+        </div>
+
+        <!-- Email Details Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-envelope-open me-2"></i>Email Details
+                    </h5>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-warning" onclick="toggleStar({{ email.id }})">
+                            <i class="fas fa-star"></i> Star
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="archiveEmail({{ email.id }})">
+                            <i class="fas fa-archive"></i> Archive
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteEmail({{ email.id }})">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Email Header -->
+                <div class="email-header mb-4">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h4 class="email-subject">{{ email.subject or 'No Subject' }}</h4>
+                            <div class="email-meta">
+                                <div class="mb-2">
+                                    <strong>From:</strong> 
+                                    <span class="text-primary">{{ email.sender }}</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>To:</strong> 
+                                    <span class="text-muted">{{ email.receiver or 'Unknown' }}</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Email ID:</strong> 
+                                    <span class="text-muted">{{ email.id }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <!-- Security Status -->
+                            {% if email.label == 'phishing' %}
+                                <div class="alert alert-danger">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <strong>PHISHING DETECTED</strong>
+                                    {% if email.confidence_score %}
+                                        <br><small>Confidence: {{ (email.confidence_score * 100)|round }}%</small>
+                                    {% endif %}
+                                    {% if email.threat_explanation %}
+                                        <hr class="my-2">
+                                        <div class="threat-details">
+                                            <strong>🚨 Threat Analysis:</strong><br>
+                                            <small>{{ email.threat_explanation }}</small>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% elif email.label == 'safe' %}
+                                <div class="alert alert-success">
+                                    <i class="fas fa-check-circle me-2"></i>
+                                    <strong>SAFE EMAIL</strong>
+                                    {% if email.confidence_score %}
+                                        <br><small>Confidence: {{ (email.confidence_score * 100)|round }}%</small>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-clock me-2"></i>
+                                    <strong>PENDING ANALYSIS</strong>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Email Body -->
+                <div class="email-body">
+                    <h6 class="mb-3">
+                        <i class="fas fa-file-text me-2"></i>Email Content
+                    </h6>
+                    <div class="email-content">
+                        {% if email.body %}
+                            <div class="email-text">
+                                {{ email.body|replace('\n', '<br>')|replace('\r', '')|safe }}
+                            </div>
+                            
+                            <!-- Word Count and Reading Time -->
+                            <div class="email-stats mt-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-align-left me-1"></i>
+                                    {{ email.body.split()|length }} words • 
+                                    <i class="fas fa-clock me-1"></i>
+                                    {{ ((email.body.split()|length / 200) * 60)|round }} sec read
+                                </small>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                No text content available. This email may contain only HTML content or attachments.
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Attachment -->
+                {% if email.attachment_path %}
+                <div class="email-attachment mt-4">
+                    <h6 class="mb-3">
+                        <i class="fas fa-paperclip me-2"></i>Attachment
+                    </h6>
+                    <div class="attachment-item">
+                        <a href="{{ url_for('download_attachment', email_id=email.id) }}" class="btn btn-outline-primary">
+                            <i class="fas fa-download me-2"></i>Download Attachment
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Analysis Actions -->
+                <div class="email-actions mt-4">
+                    <h6 class="mb-3">
+                        <i class="fas fa-cogs me-2"></i>Actions
+                    </h6>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="reanalyzeEmail()">
+                            <i class="fas fa-sync me-2"></i>Re-analyze Email
+                        </button>
+                        <button class="btn btn-info" onclick="showAnalysisDetails()">
+                            <i class="fas fa-info-circle me-2"></i>Analysis Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.email-header {
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 1rem;
+}
+
+.email-subject {
+    color: #1f2937;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.email-meta {
+    font-size: 0.9rem;
+}
+
+.email-content {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 1.5rem;
+    border: 1px solid #e5e7eb;
+}
+
+.email-text {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin: 0;
+    color: #374151;
+}
+
+.attachment-item {
+    background: #f0f9ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.email-actions {
+    border-top: 1px solid #e5e7eb;
+    padding-top: 1rem;
+}
+</style>
+
+<script>
+function reanalyzeEmail() {
+    const emailText = `{{ email.body|replace('\n', '\\n')|replace('\r', '')|replace('"', '\\"') }}`;
+    const sender = '{{ email.sender }}';
+    const subject = '{{ email.subject }}';
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('email_text', emailText);
+    formData.append('sender', sender);
+    formData.append('subject', subject);
+    
+    // Show loading
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Analyzing...';
+    btn.disabled = true;
+    
+    fetch('/analyze_email', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(`Re-analysis complete: ${data.prediction.toUpperCase()}`, 
+                           data.prediction === 'safe' ? 'success' : 'danger');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showNotification('Error during re-analysis: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showNotification('Error during re-analysis: ' + error.message, 'danger');
+    })
+    .finally(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+
+function showAnalysisDetails() {
+    const details = `
+        <div class="analysis-details">
+            <h6>Analysis Information:</h6>
+            <ul>
+                <li><strong>Email ID:</strong> {{ email.id }}</li>
+                <li><strong>Classification:</strong> {{ email.label|title }}</li>
+                {% if email.confidence_score %}
+                <li><strong>Confidence Score:</strong> {{ (email.confidence_score * 100)|round }}%</li>
+                {% endif %}
+                <li><strong>Sender:</strong> {{ email.sender }}</li>
+                <li><strong>Subject Analysis:</strong> {{ 'Contains suspicious keywords' if email.label == 'phishing' else 'No suspicious patterns detected' }}</li>
+                {% if email.threat_explanation and email.label == 'phishing' %}
+                <li><strong>Threat Details:</strong> {{ email.threat_explanation }}</li>
+                {% endif %}
+            </ul>
+        </div>
+    `;
+    
+    showNotification(details, 'info');
+}
+
+</script>
+{% endblock %}

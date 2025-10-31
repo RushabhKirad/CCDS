@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Admin - Backend Monitor{% endblock %}
+
+{% block content %}
+<div class="alert alert-warning">
+    <i class="fas fa-shield-alt me-2"></i>
+    <strong>ADMIN ONLY:</strong> Detailed backend process monitoring with security implementation details
+</div>
+
+<div class="row">
+    <!-- Real-time Logs -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-terminal me-2"></i>Live Backend Operations</h5>
+            </div>
+            <div class="card-body">
+                <div id="log-container" style="height: 500px; overflow-y: auto; background: #000; color: #00ff00; font-family: 'Courier New', monospace; padding: 15px; border-radius: 5px;">
+                    <div id="logs"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Security Status Panel -->
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5><i class="fas fa-lock me-2"></i>Security Status</h5>
+            </div>
+            <div class="card-body">
+                <div id="security-status">
+                    <div class="spinner-border spinner-border-sm me-2"></div>
+                    Loading security details...
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-database me-2"></i>System Stats</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <strong>Encrypted Credentials:</strong> {{ encryption_stats.total_encrypted_credentials }}
+                </div>
+                <div class="mb-2">
+                    <strong>Total Users:</strong> {{ encryption_stats.total_users }}
+                </div>
+                <div class="mb-2">
+                    <strong>Total Emails:</strong> {{ encryption_stats.total_emails }}
+                </div>
+                <div class="mb-2">
+                    <strong>Security Status:</strong> 
+                    <span class="badge bg-{{ 'success' if encryption_stats.security_enabled else 'danger' }}">
+                        {{ 'ACTIVE' if encryption_stats.security_enabled else 'INACTIVE' }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Real-time log updates
+function updateLogs() {
+    fetch('/admin/backend_logs')
+        .then(response => response.json())
+        .then(data => {
+            if (data.logs) {
+                const logsContainer = document.getElementById('logs');
+                logsContainer.innerHTML = '';
+                
+                data.logs.forEach(log => {
+                    const logLine = document.createElement('div');
+                    const typeColor = log.type === 'SECURITY' ? '#00ffff' : 
+                                    log.type === 'ERROR' ? '#ff0000' : '#00ff00';
+                    
+                    logLine.innerHTML = `<span style="color: ${typeColor}">[${log.timestamp}] ${log.action}</span>: ${log.details} <span style="color: #888">(${log.user})</span>`;
+                    logLine.style.marginBottom = '2px';
+                    logsContainer.appendChild(logLine);
+                });
+                
+                // Auto-scroll to top for newest logs
+                const container = document.getElementById('log-container');
+                container.scrollTop = 0;
+            }
+        })
+        .catch(error => console.log('Log update error:', error));
+}
+
+// Update Security status
+function updateSecurityStatus() {
+    fetch('/admin/pqc_details')
+        .then(response => response.json())
+        .then(data => {
+            const statusContainer = document.getElementById('security-status');
+            if (data.pqc_details) {
+                statusContainer.innerHTML = `
+                    <div class="mb-2"><strong>System Key:</strong> <span class="badge bg-success">${data.pqc_details.system_key_status}</span></div>
+                    <div class="mb-2"><strong>Method:</strong> ${data.pqc_details.encryption_method}</div>
+                    <div class="mb-2"><strong>Test Status:</strong> <span class="badge bg-${data.test_result.test_status === 'PASS' ? 'success' : 'danger'}">${data.test_result.test_status}</span></div>
+                    <div class="mb-2"><strong>Last Test:</strong> ${new Date().toLocaleTimeString()}</div>
+                `;
+            }
+        })
+        .catch(error => {
+            document.getElementById('security-status').innerHTML = '<span class="text-danger">Security Status Error</span>';
+        });
+}
+
+// Update every 3 seconds
+setInterval(updateLogs, 3000);
+setInterval(updateSecurityStatus, 10000);
+
+// Initial load
+updateLogs();
+updateSecurityStatus();
+</script>
+{% endblock %}

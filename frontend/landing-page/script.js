@@ -159,7 +159,7 @@ async function handleLogin(e) {
     submitBtn.disabled = true;
     
     try {
-        const response = await fetch('http://localhost:5000/api/login', {
+        const response = await fetch('http://localhost:3000/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
@@ -229,7 +229,7 @@ async function handleSignup(e) {
     submitBtn.disabled = true;
     
     try {
-        const response = await fetch('http://localhost:5000/api/register', {
+        const response = await fetch('http://localhost:3000/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, email, password })
@@ -341,17 +341,30 @@ function loadModule(moduleName) {
         return;
     }
     
+    let moduleUrl = '';
+    let moduleName_display = '';
+    
     switch(moduleName) {
         case 'anomaly':
-            showNotification('Redirecting to Anomaly Detection Dashboard...');
-            // Here you would redirect to the anomaly detection module
-            setTimeout(() => {
-                window.location.href = '../anomaly-detection/dashboard.html';
-            }, 1000);
+            moduleUrl = 'C:/Users/rusha/OneDrive/Desktop/Cognitive-Cyber-Defense-System/nitedu-anomaly-detection/dashboard/live_dashboard_fixed.html';
+            moduleName_display = 'Anomaly Detection System';
+            break;
+        case 'email':
+            moduleUrl = 'http://localhost:5000';
+            moduleName_display = 'Email Security System';
+            break;
+        case 'insider':
+            moduleUrl = 'http://localhost:5002';
+            moduleName_display = 'Insider Threat Detection';
             break;
         default:
-            showNotification('Module coming soon!');
+            showNotification('Module not found!');
+            return;
     }
+    
+    showNotification(`Opening ${moduleName_display}...`);
+    // Directly open the module URL in a new tab
+    window.open(moduleUrl, '_blank');
 }
 
 // Initialize auth UI on page load

@@ -53,18 +53,18 @@
                 <button class="explore-btn">Explore →</button>
             </div>
 
-            <div class="feature-card">
-                <div class="card-icon"><i class="fas fa-fish"></i></div>
-                <h3>Advanced Phishing & URL Analysis</h3>
-                <p>Utilizes NLP and computer vision to determine the authenticity of communication and web pages, actively protecting users from sophisticated email lures.</p>
-                <button class="explore-btn disabled">🔄 In Development</button>
+            <div class="feature-card" onclick="loadModule('email')">
+                <div class="card-icon"><i class="fas fa-envelope-open-text"></i></div>
+                <h3>Advanced Email Security & Phishing Detection</h3>
+                <p>AI-powered email analysis with 5 ML models achieving 99.8% accuracy. Features post-quantum cryptography and real-time Gmail integration for comprehensive email threat detection.</p>
+                <button class="explore-btn">Explore →</button>
             </div>
 
-            <div class="feature-card">
+            <div class="feature-card" onclick="loadModule('insider')">
                 <div class="card-icon"><i class="fas fa-user-shield"></i></div>
-                <h3>User Behavior Risk Monitoring</h3>
-                <p>Monitors user activity for patterns indicative of data exfiltration or privilege misuse, stopping breaches before they happen through continuous behavioral analysis.</p>
-                <button class="explore-btn disabled">🔄 In Development</button>
+                <h3>Insider Threat Detection & Behavioral Analysis</h3>
+                <p>LSTM-based behavioral learning system that monitors file access, USB connections, and user patterns. Detects anomalies and prevents data exfiltration through continuous AI analysis.</p>
+                <button class="explore-btn">Explore →</button>
             </div>
         </div>
     </section>

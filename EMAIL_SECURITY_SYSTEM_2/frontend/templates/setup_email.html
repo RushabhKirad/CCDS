@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Email Setup{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-envelope-open me-2"></i>Setup Your Email Account</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label fw-semibold">
+                    <i class="fas fa-envelope me-2"></i>Your Gmail Address
+                </label>
+                <input type="email" class="form-control" name="user_email" 
+                       placeholder="your.email@gmail.com" 
+                       value="{{ session.get('user_email', '') }}" required>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label fw-semibold">
+                    <i class="fas fa-key me-2"></i>Gmail App Password
+                </label>
+                <input type="password" class="form-control" name="user_password" 
+                       placeholder="Your Gmail app password" required>
+                <div class="form-text">
+                    <small>
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>How to get Gmail App Password:</strong><br>
+                        1. Enable 2-Factor Authentication in Gmail<br>
+                        2. Go to Google Account Settings → Security<br>
+                        3. Under "2-Step Verification" → App passwords<br>
+                        4. Generate password for "Mail"<br>
+                        5. Use that 16-character password here
+                    </small>
+                </div>
+            </div>
+            
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save me-2"></i>Save Email Settings
+                </button>
+            </div>
+        </form>
+        
+        {% if session.get('user_email') %}
+        <div class="alert alert-success mt-3">
+            <i class="fas fa-check-circle me-2"></i>
+            Currently configured for: <strong>{{ session.get('user_email') }}</strong>
+            <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-primary" onclick="fetchEmails()">
+                    <i class="fas fa-sync me-1"></i>Fetch My Emails
+                </button>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning mt-3">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>No email configured.</strong> Please enter your Gmail credentials above to start monitoring your emails.
+        </div>
+        {% endif %}
+        
+        <script>
+        function fetchEmails() {
+            fetch('/fetch_emails', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`Fetched ${data.count} emails successfully!`);
+                        window.location.href = '/dashboard';
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => alert('Error: ' + error.message));
+        }
+        </script>
+    </div>
+</div>
+{% endblock %}

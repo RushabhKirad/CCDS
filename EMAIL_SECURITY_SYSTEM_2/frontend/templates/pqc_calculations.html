@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Encryption Details{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-calculator me-2"></i>Advanced Encryption Details
+        </h5>
+        <small class="text-muted">Detailed step-by-step security process for {{ user_email }}</small>
+    </div>
+    <div class="card-body">
+        
+        <!-- Summary Stats -->
+        <!-- Error Alert -->
+        {% if not pqc_working %}
+        <div class="alert alert-danger mb-4">
+            <h6><i class="fas fa-exclamation-triangle me-2"></i>Security System Error</h6>
+            <p><strong>{{ error_message }}</strong></p>
+            <p class="mb-0">The security system is not functioning properly. Check the details below for troubleshooting information.</p>
+        </div>
+        {% endif %}
+        
+        <!-- Summary Stats -->
+        <div class="row mb-4">
+            <div class="col-md-2">
+                <div class="text-center p-3 {{ 'bg-light' if pqc_working else 'bg-secondary text-white' }} rounded">
+                    <h6>Input</h6>
+                    <strong>{{ summary.input_length if pqc_working else 'N/A' }}</strong> {{ 'chars' if pqc_working else '' }}
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center p-3 {{ 'bg-light' if pqc_working else 'bg-secondary text-white' }} rounded">
+                    <h6>Salt</h6>
+                    <strong>{{ summary.salt_length if pqc_working else 'N/A' }}</strong> {{ 'bytes' if pqc_working else '' }}
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center p-3 {{ 'bg-light' if pqc_working else 'bg-secondary text-white' }} rounded">
+                    <h6>Key</h6>
+                    <strong>{{ summary.derived_key_length if pqc_working else 'N/A' }}</strong> {{ 'bytes' if pqc_working else '' }}
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center p-3 {{ 'bg-light' if pqc_working else 'bg-secondary text-white' }} rounded">
+                    <h6>Encrypted</h6>
+                    <strong>{{ summary.encrypted_length if pqc_working else 'N/A' }}</strong> {{ 'bytes' if pqc_working else '' }}
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center p-3 {{ 'bg-light' if pqc_working else 'bg-secondary text-white' }} rounded">
+                    <h6>Final</h6>
+                    <strong>{{ summary.final_storage_length if pqc_working else 'N/A' }}</strong> {{ 'chars' if pqc_working else '' }}
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center p-3 {{ 'bg-success' if (pqc_working and summary.verification_passed) else 'bg-danger' }} text-white rounded">
+                    <h6>Status</h6>
+                    <strong>{{ 'PASS' if (pqc_working and summary.verification_passed) else 'FAIL' }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Calculations -->
+        <div class="calculation-steps">
+            {% for calc in calculations %}
+                {% if calc.startswith('===') %}
+                    <div class="alert alert-primary mt-4">
+                        <h6 class="mb-0">{{ calc.replace('===', '').strip() }}</h6>
+                    </div>
+                {% elif calc.startswith('Step') %}
+                    <div class="step-header mt-3 mb-2">
+                        <h6 class="text-primary">{{ calc }}</h6>
+                    </div>
+                {% elif ':' in calc %}
+                    <div class="calculation-line">
+                        {% set parts = calc.split(':', 1) %}
+                        <div class="row">
+                            <div class="col-md-3">
+                                <strong>{{ parts[0] }}:</strong>
+                            </div>
+                            <div class="col-md-9">
+                                <code class="bg-light p-1 rounded">{{ parts[1].strip() }}</code>
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="calculation-info text-muted">
+                        {{ calc }}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        <!-- Actions -->
+        <div class="mt-4">
+            <button class="btn btn-primary" onclick="refreshCalculations()">
+                <i class="fas fa-sync me-2"></i>Generate New Calculation
+            </button>
+            <button class="btn btn-secondary" onclick="copyCalculations()">
+                <i class="fas fa-copy me-2"></i>Copy to Clipboard
+            </button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.calculation-steps {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+.calculation-line {
+    margin-bottom: 0.5rem;
+    padding: 0.25rem 0;
+}
+
+.step-header {
+    border-left: 4px solid #007bff;
+    padding-left: 1rem;
+    background-color: #f8f9fa;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+}
+
+.calculation-info {
+    margin-left: 1rem;
+    font-size: 0.85rem;
+}
+
+code {
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+</style>
+
+<script>
+function refreshCalculations() {
+    window.location.reload();
+}
+
+function copyCalculations() {
+    const calculations = {{ calculations | tojson }};
+    const text = calculations.join('\n');
+    
+    navigator.clipboard.writeText(text).then(function() {
+        alert('Calculations copied to clipboard!');
+    }).catch(function(err) {
+        console.error('Could not copy text: ', err);
+        alert('Failed to copy calculations');
+    });
+}
+</script>
+{% endblock %}

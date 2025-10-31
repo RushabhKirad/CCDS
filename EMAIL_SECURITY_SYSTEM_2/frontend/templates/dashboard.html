@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Manual Fetch Banner -->
+<div class="alert alert-primary mb-3" style="z-index: 1020;">
+    <div class="d-flex align-items-center">
+        <strong>📧 Email Security System</strong>
+        <span class="ms-auto">
+            <button class="btn btn-sm btn-success me-2" onclick="fetchEmails()" id="fetchBtn">
+                <i class="fas fa-sync-alt me-1"></i>Fetch New Emails
+            </button>
+            <small>User: {{ user_email }}</small>
+        </span>
+    </div>
+</div>
+
+
+
+<!-- Statistics Cards - Laptop Optimized -->
+<div class="row mb-4 g-3">
+    <div class="col-xl-3 col-lg-6">
+        <div class="stats-card">
+            <div class="d-flex align-items-center">
+                <div class="stats-icon bg-primary">
+                    <i class="fas fa-envelope"></i>
+                </div>
+                <div class="ms-3">
+                    <div class="stats-number">{{ stats.total }}</div>
+                    <div class="text-muted small">Total Emails</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-lg-6">
+        <div class="stats-card">
+            <div class="d-flex align-items-center">
+                <div class="stats-icon bg-success">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="ms-3">
+                    <div class="stats-number text-success">{{ stats.safe }}</div>
+                    <div class="text-muted small">Safe Emails</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-lg-6">
+        <div class="stats-card">
+            <div class="d-flex align-items-center">
+                <div class="stats-icon bg-danger">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="ms-3">
+                    <div class="stats-number text-danger">{{ stats.phishing }}</div>
+                    <div class="text-muted small">Phishing Detected</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-lg-6">
+        <div class="stats-card">
+            <div class="d-flex align-items-center">
+                <div class="stats-icon bg-warning">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="ms-3">
+                    <div class="stats-number text-warning">{{ stats.pending }}</div>
+                    <div class="text-muted small">Pending Analysis</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Email Inbox -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-inbox me-2"></i>Email Inbox</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th><i class="fas fa-user me-1"></i>From</th>
+                        <th><i class="fas fa-subject me-1"></i>Subject</th>
+                        <th><i class="fas fa-calendar me-1"></i>Received</th>
+                        <th><i class="fas fa-shield-alt me-1"></i>Status</th>
+                        <th><i class="fas fa-percentage me-1"></i>Confidence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mail in emails %}
+                    <tr class="{{ 'table-warning' if not mail.is_read else '' }} email-row" data-email-id="{{ mail.id }}">
+                        <td onclick="openEmail({{ mail.id }})" style="cursor:pointer;">
+                            <div class="d-flex align-items-center">
+                                <div class="me-2">
+                                    <button class="btn btn-sm btn-outline-warning" onclick="event.stopPropagation(); toggleStar({{ mail.id }})" title="Star">
+                                        <i class="fas fa-star {{ 'text-warning' if mail.is_starred else '' }}"></i>
+                                    </button>
+                                </div>
+                                <div class="avatar-sm bg-primary rounded-circle d-flex align-items-center justify-content-center me-2">
+                                    <i class="fas fa-user text-white"></i>
+                                </div>
+                                <div>
+                                    <div class="{{ 'fw-bold' if not mail.is_read else '' }}">{{ mail.sender }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td onclick="openEmail({{ mail.id }})" style="cursor:pointer;">
+                            <div class="{{ 'fw-bold' if not mail.is_read else '' }}">
+                                {{ mail.subject or 'No Subject' }}
+                                {% if mail.attachment_path %}
+                                    <i class="fas fa-paperclip ms-1 text-muted"></i>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td onclick="openEmail({{ mail.id }})" style="cursor:pointer;">
+                            <small class="text-muted">
+                                {% if mail.created_at %}
+                                    {{ mail.created_at.strftime('%b %d, %Y %I:%M %p') }}
+                                {% else %}
+                                    ID: {{ mail.id }}
+                                {% endif %}
+                            </small>
+                        </td>
+                        <td onclick="openEmail({{ mail.id }})" style="cursor:pointer;">
+                            {% if mail.label == 'phishing' %}
+                                <div>
+                                    <span class="badge bg-danger pulse-animation">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>PHISHING
+                                    </span>
+                                    {% if mail.threat_explanation %}
+                                        <div class="mt-1">
+                                            <small class="text-danger fw-bold">{{ mail.threat_explanation }}</small>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% elif mail.label == 'safe' %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-shield-check me-1"></i>SAFE
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-clock me-1"></i>Analyzing...
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                {% if mail.confidence_score %}
+                                    <div class="progress me-2" style="height: 8px; width: 60px;">
+                                        <div class="progress-bar" style="width: {{ (mail.confidence_score * 100)|round }}%"></div>
+                                    </div>
+                                    <small class="text-muted">{{ (mail.confidence_score * 100)|round }}%</small>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                                <div class="dropdown ms-2">
+                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="#" onclick="archiveEmail({{ mail.id }})">
+                                            <i class="fas fa-archive me-2"></i>Archive
+                                        </a></li>
+                                        <li><a class="dropdown-item text-danger" href="#" onclick="deleteEmail({{ mail.id }})">
+                                            <i class="fas fa-trash me-2"></i>Delete
+                                        </a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-5">
+                            <div class="text-muted">
+                                <i class="fas fa-inbox fa-3x mb-3"></i>
+                                <h5>No emails found</h5>
+                                <p>Click "Fetch New Emails" button above to get your Gmail emails.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+.avatar-sm {
+    width: 35px;
+    height: 35px;
+    font-size: 0.875rem;
+}
+
+.stats-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.stats-card {
+    padding: 1.5rem;
+    border-radius: 15px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.stats-number {
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.email-row:hover {
+    background-color: rgba(0, 123, 255, 0.1) !important;
+    transform: scale(1.01);
+}
+
+.pulse-animation {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+@media (max-width: 768px) {
+    .stats-card {
+        padding: 1rem;
+    }
+    
+    .stats-number {
+        font-size: 1.5rem;
+    }
+    
+    .stats-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+}
+</style>
+
+<script>
+function openEmail(emailId) {
+    window.location.href = `/email/${emailId}`;
+}
+
+function fetchEmails() {
+    const fetchBtn = document.getElementById('fetchBtn');
+    const originalText = fetchBtn.innerHTML;
+    
+    // Show loading state
+    fetchBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Fetching...';
+    fetchBtn.disabled = true;
+    
+    fetch('/fetch_emails', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            if (data.count > 0) {
+                // Show success message and reload page
+                alert(`Successfully fetched ${data.count} new emails!`);
+                location.reload();
+            } else {
+                alert('No new emails found in your Gmail inbox');
+            }
+        } else {
+            alert(`Error: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Fetch error:', error);
+        alert('Error fetching emails. Please try again.');
+    })
+    .finally(() => {
+        // Restore button state
+        fetchBtn.innerHTML = originalText;
+        fetchBtn.disabled = false;
+    });
+}
+
+// Manual fetch mode - no auto-refresh
+console.log('Manual fetch mode enabled - use Fetch New Emails button');
+
+function updateStatsDisplay(stats) {
+    // Update stats cards
+    const totalEl = document.querySelector('.stats-card:nth-child(1) .stats-number');
+    const safeEl = document.querySelector('.stats-card:nth-child(2) .stats-number');
+    const phishingEl = document.querySelector('.stats-card:nth-child(3) .stats-number');
+    const pendingEl = document.querySelector('.stats-card:nth-child(4) .stats-number');
+    
+    if (totalEl) totalEl.textContent = stats.total || 0;
+    if (safeEl) safeEl.textContent = stats.safe || 0;
+    if (phishingEl) phishingEl.textContent = stats.phishing || 0;
+    if (pendingEl) pendingEl.textContent = stats.pending || 0;
+    
+    // Update sidebar badges
+    const sidebarBadges = document.querySelectorAll('.list-group-item .badge');
+    if (sidebarBadges[0]) sidebarBadges[0].textContent = stats.total || 0;
+    if (sidebarBadges[2]) sidebarBadges[2].textContent = stats.phishing || 0;
+    if (sidebarBadges[3]) sidebarBadges[3].textContent = stats.safe || 0;
+    
+    // Update last updated time
+    const lastUpdateEl = document.getElementById('lastUpdate');
+    if (lastUpdateEl) {
+        lastUpdateEl.textContent = new Date().toLocaleTimeString();
+    }
+}
+</script>
+{% endblock %}
