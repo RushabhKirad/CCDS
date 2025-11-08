@@ -5,7 +5,7 @@ cd EMAIL_SECURITY_SYSTEM_2
 python app.py
 
 cd Insider_threat_detection
-python run.py
+python app.py
 
 cd nitedu-anomaly-detection
 python run.py
