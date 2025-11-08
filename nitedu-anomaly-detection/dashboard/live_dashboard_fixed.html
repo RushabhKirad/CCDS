@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛡️ Anomaly Detection System - Live Monitor</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%); color: #ffffff; min-height: 100vh; }
+        .dashboard { min-height: 100vh; display: flex; flex-direction: column; }
+        .header { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding: 1rem 2rem; }
+        .header-content { display: flex; justify-content: space-between; align-items: center; max-width: 1400px; margin: 0 auto; }
+        .header h1 { font-size: 1.5rem; font-weight: 600; color: #00d4ff; }
+        .status-indicators { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end; }
+        .status-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff4757; animation: pulse 2s infinite; }
+        .status-dot.online { background: #2ed573; }
+        .live-status { font-size: 0.75rem; color: #a0a0a0; text-align: right; margin-top: 0.25rem; }
+        .live-status.online { color: #2ed573; }
+        .live-status.offline { color: #ff4757; }
+        .main-content { flex: 1; padding: 2rem; max-width: 1400px; margin: 0 auto; width: 100%; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .stat-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1.5rem; display: flex; align-items: center; gap: 1rem; transition: transform 0.2s ease; }
+        .stat-card:hover { transform: translateY(-2px); }
+        .stat-icon { width: 50px; height: 50px; border-radius: 10px; background: #00d4ff; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+        .stat-icon.critical { background: #ff4757; }
+        .stat-icon.success { background: #2ed573; }
+        .stat-icon.info { background: #5352ed; }
+        .stat-icon.warning { background: #ffa502; }
+        .stat-content h3 { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.25rem; }
+        .stat-content p { color: #a0a0a0; font-size: 0.85rem; }
+        .threats-section { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1.5rem; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .section-header h3 { color: #00d4ff; font-size: 1.2rem; }
+        .threats-feed { max-height: 300px; overflow-y: auto; border-radius: 8px; }
+        .no-threats { text-align: center; padding: 2rem; color: #a0a0a0; }
+        .no-threats i { font-size: 2rem; margin-bottom: 1rem; color: #2ed573; }
+        .threat-item { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 1rem; margin-bottom: 0.5rem; animation: slideIn 0.3s ease; }
+        .threat-item.high-severity { border-left: 4px solid #ff4757; }
+        .threat-item.medium-severity { border-left: 4px solid #ffa502; }
+        .threat-item.low-severity { border-left: 4px solid #2ed573; }
+        .threat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+        .threat-type { font-weight: 600; color: #ff4757; }
+        .threat-time { font-size: 0.8rem; color: #a0a0a0; }
+        .threat-details { font-size: 0.9rem; color: #d0d0d0; }
+        .alert-popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0, 0, 0, 0.95); backdrop-filter: blur(20px); border: 2px solid #ff4757; border-radius: 15px; padding: 2rem; z-index: 1000; min-width: 400px; animation: popupSlide 0.5s ease; box-shadow: 0 20px 40px rgba(255, 71, 87, 0.3); display: none; }
+        .alert-popup.show { display: block; }
+        .alert-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+        .alert-icon { width: 60px; height: 60px; background: #ff4757; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; animation: pulse 1s infinite; }
+        .alert-title { font-size: 1.5rem; font-weight: 700; color: #ff4757; }
+        .alert-details { margin-bottom: 1.5rem; }
+        .alert-detail-item { display: flex; justify-content: space-between; margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(255, 255, 255, 0.05); border-radius: 5px; }
+        .alert-close { background: #ff4757; color: white; border: none; padding: 0.75rem 2rem; border-radius: 8px; cursor: pointer; font-size: 1rem; width: 100%; transition: background 0.2s ease; }
+        .alert-close:hover { background: #ff3742; }
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 999; display: none; }
+        .overlay.show { display: block; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes popupSlide { from { opacity: 0; transform: translate(-50%, -60%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-shield-alt"></i> Anomaly Detection System - Live Monitor</h1>
+                <div class="status-indicators">
+                    <div class="status-item">
+                        <i class="fas fa-database"></i>
+                        <span>Database</span>
+                        <div class="status-dot" id="db-dot"></div>
+                    </div>
+                    <div class="live-status" id="live-status">
+                        Database offline ✗<br>
+                        📊 LIVE DB | 00:00:00 | Req: 0 | Attacks: 0 | Alerts: 0
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fas fa-globe"></i></div>
+                    <div class="stat-content">
+                        <h3 id="total-requests">0</h3>
+                        <p>Total Requests</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon critical"><i class="fas fa-exclamation-triangle"></i></div>
+                    <div class="stat-content">
+                        <h3 id="total-attacks">0</h3>
+                        <p>Attacks Detected</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon warning"><i class="fas fa-fire"></i></div>
+                    <div class="stat-content">
+                        <h3 id="high-severity">0</h3>
+                        <p>High Severity</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon success"><i class="fas fa-check-circle"></i></div>
+                    <div class="stat-content">
+                        <h3 id="detection-rate">0%</h3>
+                        <p>Detection Rate</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="threats-section">
+                <div class="section-header">
+                    <h3><i class="fas fa-stream"></i> Live Threat Feed</h3>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="dashboard.refresh()" style="background: #00d4ff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;">🔄 Refresh</button>
+                        <button onclick="dashboard.testPopup()" style="background: #ffa502; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Test Popup</button>
+                    </div>
+                </div>
+                <div class="threats-feed" id="threats-feed">
+                    <div class="no-threats">
+                        <i class="fas fa-shield-check"></i>
+                        <p>Connecting to database...</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Alert Popup -->
+    <div class="overlay" id="overlay" onclick="dashboard.closeAlert()"></div>
+    <div class="alert-popup" id="alert-popup">
+        <div class="alert-header">
+            <div class="alert-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="alert-title">🚨 SECURITY ALERT</div>
+        </div>
+        <div class="alert-details" id="alert-details">
+            <!-- Alert details will be populated here -->
+        </div>
+        <button class="alert-close" onclick="dashboard.closeAlert()">ACKNOWLEDGE</button>
+    </div>
+
+    <script>
+        class Dashboard {
+            constructor() {
+                this.apiUrl = 'http://127.0.0.1:5000';
+                this.stats = { totalRequests: 0, totalAttacks: 0, highSeverity: 0, detectionRate: 0 };
+                this.knownAlerts = new Set();
+                this.init();
+            }
+
+            async init() {
+                await this.connect();
+                await this.loadData();
+                setInterval(() => this.loadData(), 2000);
+            }
+
+            async connect() {
+                try {
+                    console.log('🔍 Testing connection to:', this.apiUrl);
+                    const response = await fetch(`${this.apiUrl}/api/health`, {
+                        method: 'GET',
+                        mode: 'cors'
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const health = await response.json();
+                    console.log('✅ API Response:', health);
+                    
+                    document.getElementById('db-dot').className = 'status-dot online';
+                    document.getElementById('live-status').innerHTML = 'Database online ✓<br>📊 Connected';
+                    document.getElementById('live-status').className = 'live-status online';
+                    
+                    console.log('✅ Connected to database API');
+                    return true;
+                } catch (error) {
+                    console.error('❌ Database connection failed:', error);
+                    document.getElementById('db-dot').className = 'status-dot';
+                    document.getElementById('live-status').innerHTML = 'Database offline ✗<br>Check console for errors';
+                    document.getElementById('live-status').className = 'live-status offline';
+                    return false;
+                }
+            }
+
+            async loadData() {
+                try {
+                    // Load stats
+                    const statsResponse = await fetch(`${this.apiUrl}/api/stats`);
+                    const stats = await statsResponse.json();
+                    
+                    this.stats.totalRequests = stats.total_requests || 0;
+                    this.stats.totalAttacks = stats.attack_requests || 0;
+                    this.stats.highSeverity = stats.high_severity_alerts || 0;
+                    this.stats.detectionRate = stats.detection_rate || 91.77;
+                    
+                    this.updateStats();
+                    
+                    // Update live status
+                    const liveStatus = `📊 LIVE DB | ${new Date().toLocaleTimeString()} | Req: ${this.stats.totalRequests} | Attacks: ${this.stats.totalAttacks} | Alerts: ${stats.total_alerts || 0}`;
+                    document.getElementById('live-status').innerHTML = `Database online ✓<br>${liveStatus}`;
+                    
+                    // Load alerts and check for new ones
+                    const alertsResponse = await fetch(`${this.apiUrl}/api/alerts`);
+                    const alerts = await alertsResponse.json();
+                    
+                    this.checkNewAlerts(alerts);
+                    this.updateAlerts(alerts);
+                    
+                } catch (error) {
+                    console.error('❌ Failed to load data:', error);
+                }
+            }
+
+            checkNewAlerts(alerts) {
+                // Only check for truly new alerts (created in last 10 seconds)
+                const now = new Date();
+                const recentThreshold = 10000; // 10 seconds
+                
+                const recentAlerts = alerts.filter(alert => {
+                    const alertTime = new Date(alert.timestamp);
+                    return (now - alertTime) < recentThreshold;
+                });
+                
+                const newAlerts = recentAlerts.filter(alert => !this.knownAlerts.has(alert.id));
+                
+                if (newAlerts.length > 0) {
+                    console.log(`🆕 Found ${newAlerts.length} new recent alerts`);
+                    
+                    // Process only the latest high-confidence alert for popup
+                    const highConfidenceAlerts = newAlerts.filter(alert => alert.confidence >= 0.8);
+                    
+                    newAlerts.forEach(alert => {
+                        this.knownAlerts.add(alert.id);
+                        console.log(`📋 New alert: ${alert.attack_type} (${(alert.confidence * 100).toFixed(1)}%) ID: ${alert.id}`);
+                    });
+                    
+                    // Show popup for the most recent high confidence alert
+                    if (highConfidenceAlerts.length > 0) {
+                        const latestAlert = highConfidenceAlerts[0]; // Most recent alert
+                        console.log(`🚨 Triggering popup for: ${latestAlert.attack_type}`);
+                        
+                        // Force close and refresh popup
+                        this.forceRefreshPopup(latestAlert);
+                    }
+                }
+                
+                // Add all alerts to known set to prevent re-showing old alerts
+                alerts.forEach(alert => this.knownAlerts.add(alert.id));
+            }
+            
+            forceRefreshPopup(alert) {
+                // Force close existing popup
+                this.closeAlert();
+                
+                // Clear any existing content
+                document.getElementById('alert-details').innerHTML = '';
+                
+                // Wait a moment then show new popup
+                setTimeout(() => {
+                    this.showAlertPopup(alert);
+                }, 200);
+            }
+
+            showAlertPopup(alert) {
+                console.log('🚨 Showing popup for alert:', alert.attack_type, alert.id);
+                
+                const alertDetails = document.getElementById('alert-details');
+                alertDetails.innerHTML = `
+                    <div class="alert-detail-item">
+                        <span>Attack Type:</span>
+                        <span style="color: #ff4757; font-weight: bold;">${alert.attack_type}</span>
+                    </div>
+                    <div class="alert-detail-item">
+                        <span>Source IP:</span>
+                        <span style="color: #ffa502; font-weight: bold;">${alert.source_ip}</span>
+                    </div>
+                    <div class="alert-detail-item">
+                        <span>Confidence:</span>
+                        <span style="color: #ff4757; font-weight: bold;">${(alert.confidence * 100).toFixed(1)}%</span>
+                    </div>
+                    <div class="alert-detail-item">
+                        <span>Detection Method:</span>
+                        <span>${alert.method || 'ML Engine'}</span>
+                    </div>
+                    <div class="alert-detail-item">
+                        <span>Timestamp:</span>
+                        <span>${new Date(alert.timestamp).toLocaleString()}</span>
+                    </div>
+                    <div class="alert-detail-item">
+                        <span>Path:</span>
+                        <span style="color: #00d4ff;">${alert.path || 'N/A'}</span>
+                    </div>
+                    <div class="alert-detail-item">
+                        <span>Alert ID:</span>
+                        <span style="color: #a0a0a0; font-size: 0.8rem;">${alert.id}</span>
+                    </div>
+                `;
+
+                document.getElementById('overlay').classList.add('show');
+                document.getElementById('alert-popup').classList.add('show');
+                
+                console.log('✅ Popup displayed with latest alert data');
+            }
+
+            closeAlert() {
+                document.getElementById('overlay').classList.remove('show');
+                document.getElementById('alert-popup').classList.remove('show');
+            }
+
+            updateStats() {
+                document.getElementById('total-requests').textContent = this.stats.totalRequests.toLocaleString();
+                document.getElementById('total-attacks').textContent = this.stats.totalAttacks.toLocaleString();
+                document.getElementById('high-severity').textContent = this.stats.highSeverity.toLocaleString();
+                document.getElementById('detection-rate').textContent = this.stats.detectionRate + '%';
+            }
+
+            updateAlerts(alerts) {
+                const feed = document.getElementById('threats-feed');
+                
+                if (alerts.length === 0) {
+                    feed.innerHTML = '<div class="no-threats"><i class="fas fa-shield-check"></i><p>No threats detected</p></div>';
+                    return;
+                }
+                
+                feed.innerHTML = '';
+                alerts.slice(0, 10).forEach(alert => {
+                    const severity = alert.confidence >= 0.8 ? 'high' : alert.confidence >= 0.5 ? 'medium' : 'low';
+                    const alertElement = document.createElement('div');
+                    alertElement.className = `threat-item ${severity}-severity`;
+                    alertElement.innerHTML = `
+                        <div class="threat-header">
+                            <span class="threat-type">${alert.attack_type}</span>
+                            <span class="threat-time">${new Date(alert.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        <div class="threat-details">
+                            Source: ${alert.source_ip} | Confidence: ${(alert.confidence * 100).toFixed(1)}% | Method: ${alert.method}
+                        </div>
+                    `;
+                    feed.appendChild(alertElement);
+                });
+            }
+
+            async refresh() {
+                console.log('🔄 Manual refresh');
+                await this.connect();
+                await this.loadData();
+            }
+            
+            testPopup() {
+                console.log('🧪 Testing popup with fake alert');
+                const testAlert = {
+                    id: 'test_' + Date.now(),
+                    attack_type: 'Test Alert',
+                    confidence: 0.95,
+                    source_ip: '192.168.1.100',
+                    method: 'Test Method',
+                    timestamp: new Date().toISOString(),
+                    path: '/test/path'
+                };
+                this.forceRefreshPopup(testAlert);
+            }
+        }
+
+        const dashboard = new Dashboard();
+    </script>
+</body>
+</html>

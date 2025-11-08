@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - File Restrictions</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #0a0e27; color: #ffffff; }
+        .navbar { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); }
+        .card { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .file-item { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .file-item:hover { background: rgba(255,255,255,0.05); }
+        .restricted { background: rgba(220, 53, 69, 0.2); }
+        .folder-icon { color: #ffc107; }
+        .file-icon { color: #17a2b8; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/dashboard">
+                <i class="fas fa-shield-alt me-2"></i>Admin Panel
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/dashboard">
+                    <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+                </a>
+                <a class="nav-link" href="/logout">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <!-- File Browser -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between">
+                        <h5><i class="fas fa-folder-open me-2"></i>File Browser</h5>
+                        <div>
+                            <input type="text" id="searchFiles" class="form-control form-control-sm" placeholder="Search files..." style="width: 200px;">
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb" id="breadcrumb">
+                                <li class="breadcrumb-item"><a href="#" onclick="browseFolder('C:\\')">C:\</a></li>
+                            </ol>
+                        </nav>
+                        
+                        <div id="fileList" style="max-height: 500px; overflow-y: auto;">
+                            <!-- Files will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Restriction Controls -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-ban me-2"></i>Restriction Controls</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Selected File/Folder:</label>
+                            <input type="text" id="selectedPath" class="form-control" readonly>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Restriction Level:</label>
+                            <select id="restrictionLevel" class="form-select">
+                                <option value="no_access">No Access</option>
+                                <option value="admin_only">Admin Only</option>
+                                <option value="read_only">Read Only</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Description:</label>
+                            <textarea id="description" class="form-control" rows="3"></textarea>
+                        </div>
+                        
+                        <button class="btn btn-danger w-100 mb-2" onclick="addRestriction()">
+                            <i class="fas fa-ban me-1"></i>Add Restriction
+                        </button>
+                        
+                        <button class="btn btn-success w-100" onclick="removeRestriction()">
+                            <i class="fas fa-check me-1"></i>Remove Restriction
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5><i class="fas fa-bolt me-2"></i>Quick Actions</h5>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-warning btn-sm w-100 mb-2" onclick="restrictSystemFiles()">
+                            <i class="fas fa-windows me-1"></i>Restrict System Files
+                        </button>
+                        <button class="btn btn-info btn-sm w-100 mb-2" onclick="restrictDocuments()">
+                            <i class="fas fa-file-alt me-1"></i>Restrict Documents
+                        </button>
+                        <button class="btn btn-secondary btn-sm w-100" onclick="loadRestrictions()">
+                            <i class="fas fa-sync me-1"></i>Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Restrictions -->
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-list me-2"></i>Current Restrictions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-dark table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Path</th>
+                                        <th>Type</th>
+                                        <th>Level</th>
+                                        <th>Description</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="restrictionsTable">
+                                    <!-- Restrictions will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentPath = 'C:\\';
+        let selectedFile = '';
+
+        // Load files in directory
+        function browseFolder(path) {
+            currentPath = path;
+            fetch('/api/browse_files', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: path })
+            })
+            .then(response => response.json())
+            .then(data => {
+                displayFiles(data.files);
+                updateBreadcrumb(path);
+            });
+        }
+
+        // Display files
+        function displayFiles(files) {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+            
+            files.forEach(file => {
+                const div = document.createElement('div');
+                div.className = `file-item ${file.restricted ? 'restricted' : ''}`;
+                div.onclick = () => selectFile(file.path, file.type);
+                
+                const icon = file.type === 'folder' ? 'fas fa-folder folder-icon' : 'fas fa-file file-icon';
+                const restrictedBadge = file.restricted ? '<span class="badge bg-danger ms-2">RESTRICTED</span>' : '';
+                
+                div.innerHTML = `
+                    <i class="${icon} me-2"></i>
+                    ${file.name}
+                    ${restrictedBadge}
+                `;
+                
+                if (file.type === 'folder') {
+                    div.ondblclick = () => browseFolder(file.path);
+                }
+                
+                fileList.appendChild(div);
+            });
+        }
+
+        // Select file
+        function selectFile(path, type) {
+            selectedFile = path;
+            document.getElementById('selectedPath').value = path;
+            
+            // Remove previous selection
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.classList.remove('bg-primary');
+            });
+            
+            // Highlight selected
+            event.target.classList.add('bg-primary');
+        }
+
+        // Add restriction
+        function addRestriction() {
+            if (!selectedFile) {
+                alert('Please select a file or folder first');
+                return;
+            }
+            
+            const level = document.getElementById('restrictionLevel').value;
+            const description = document.getElementById('description').value;
+            
+            fetch('/api/add_restriction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    path: selectedFile,
+                    level: level,
+                    description: description
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Restriction added successfully');
+                    loadRestrictions();
+                    browseFolder(currentPath);
+                }
+            });
+        }
+
+        // Remove restriction
+        function removeRestriction() {
+            if (!selectedFile) {
+                alert('Please select a restricted file first');
+                return;
+            }
+            
+            fetch('/api/remove_restriction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: selectedFile })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Restriction removed successfully');
+                    loadRestrictions();
+                    browseFolder(currentPath);
+                }
+            });
+        }
+
+        // Quick actions
+        function restrictSystemFiles() {
+            const systemPaths = [
+                'C:\\Windows\\System32',
+                'C:\\Windows\\SysWOW64',
+                'C:\\Program Files',
+                'C:\\Program Files (x86)'
+            ];
+            
+            systemPaths.forEach(path => {
+                fetch('/api/add_restriction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        path: path,
+                        level: 'admin_only',
+                        description: 'System files - Admin access only'
+                    })
+                });
+            });
+            
+            setTimeout(() => {
+                loadRestrictions();
+                alert('System files restricted');
+            }, 1000);
+        }
+
+        function restrictDocuments() {
+            const docPaths = [
+                'C:\\confidential',
+                'C:\\sensitive',
+                'C:\\Users\\Public\\Documents\\Confidential'
+            ];
+            
+            docPaths.forEach(path => {
+                fetch('/api/add_restriction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        path: path,
+                        level: 'no_access',
+                        description: 'Confidential documents'
+                    })
+                });
+            });
+            
+            setTimeout(() => {
+                loadRestrictions();
+                alert('Document folders restricted');
+            }, 1000);
+        }
+
+        // Load current restrictions
+        function loadRestrictions() {
+            fetch('/api/get_restrictions')
+            .then(response => response.json())
+            .then(data => {
+                const table = document.getElementById('restrictionsTable');
+                table.innerHTML = '';
+                
+                data.restrictions.forEach(restriction => {
+                    const row = table.insertRow();
+                    row.innerHTML = `
+                        <td>${restriction.resource_path}</td>
+                        <td><span class="badge bg-info">${restriction.resource_type}</span></td>
+                        <td><span class="badge bg-warning">${restriction.restriction_level}</span></td>
+                        <td>${restriction.description || 'N/A'}</td>
+                        <td>
+                            <button class="btn btn-sm btn-danger" onclick="deleteRestriction(${restriction.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                });
+            });
+        }
+
+        function deleteRestriction(id) {
+            fetch('/api/delete_restriction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadRestrictions();
+                }
+            });
+        }
+
+        function updateBreadcrumb(path) {
+            const breadcrumb = document.getElementById('breadcrumb');
+            const parts = path.split('\\').filter(p => p);
+            
+            breadcrumb.innerHTML = '<li class="breadcrumb-item"><a href="#" onclick="browseFolder(\'C:\\\')">C:</a></li>';
+            
+            let currentPath = 'C:';
+            parts.slice(1).forEach(part => {
+                currentPath += '\\' + part;
+                breadcrumb.innerHTML += `<li class="breadcrumb-item"><a href="#" onclick="browseFolder('${currentPath}\\\\')">${part}</a></li>`;
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            browseFolder('C:\\');
+            loadRestrictions();
+        });
+    </script>
+</body>
+</html>
