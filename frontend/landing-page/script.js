@@ -159,7 +159,7 @@ async function handleLogin(e) {
     submitBtn.disabled = true;
     
     try {
-        const response = await fetch('http://localhost:3000/api/login', {
+        const response = await fetch('http://localhost:4000/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
@@ -229,7 +229,7 @@ async function handleSignup(e) {
     submitBtn.disabled = true;
     
     try {
-        const response = await fetch('http://localhost:3000/api/register', {
+        const response = await fetch('http://localhost:4000/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, email, password })
@@ -346,16 +346,16 @@ function loadModule(moduleName) {
     
     switch(moduleName) {
         case 'anomaly':
-            moduleUrl = 'C:/Users/rusha/OneDrive/Desktop/Cognitive-Cyber-Defense-System/nitedu-anomaly-detection/dashboard/live_dashboard_fixed.html';
-            moduleName_display = 'Anomaly Detection System';
+            moduleUrl = 'http://localhost:8001';
+            moduleName_display = 'Anomaly Detection System (Port 8001)';
             break;
-        case 'email':
-            moduleUrl = 'http://localhost:5000';
-            moduleName_display = 'Email Security System';
+        case 'phishing':
+            moduleUrl = 'http://localhost:5001';
+            moduleName_display = 'Phishing Detection System (Port 5001)';
             break;
         case 'insider':
             moduleUrl = 'http://localhost:5002';
-            moduleName_display = 'Insider Threat Detection';
+            moduleName_display = 'Insider Threat Detection (Port 5002)';
             break;
         default:
             showNotification('Module not found!');
@@ -363,7 +363,6 @@ function loadModule(moduleName) {
     }
     
     showNotification(`Opening ${moduleName_display}...`);
-    // Directly open the module URL in a new tab
     window.open(moduleUrl, '_blank');
 }
 
