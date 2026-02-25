@@ -220,5 +220,7 @@ temp/
 test_results/
 results/
 recordings/
+*.zip
+*.rar
 *.mp4
 *.webp
