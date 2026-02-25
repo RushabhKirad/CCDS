@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phishing Detection Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 20px; padding: 20px; margin-bottom: 30px; }
+        .header h1 { color: white; font-size: 2.5rem; margin-bottom: 10px; }
+        .analyzer { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 20px; padding: 30px; margin-bottom: 20px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; color: white; margin-bottom: 8px; font-weight: 500; }
+        .form-group input, .form-group textarea { width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.3); border-radius: 10px; background: rgba(255,255,255,0.1); color: white; }
+        .analyze-btn { background: linear-gradient(45deg, #4CAF50, #45a049); color: white; border: none; padding: 15px 30px; border-radius: 10px; cursor: pointer; font-size: 16px; width: 100%; }
+        .results { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 20px; padding: 30px; }
+        .result-item { background: rgba(255,255,255,0.05); border-radius: 10px; padding: 20px; margin-bottom: 15px; }
+        .back-btn { position: fixed; top: 20px; left: 20px; background: rgba(255,255,255,0.1); color: white; padding: 12px 20px; border-radius: 10px; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <a href="../landing-page/index.html" class="back-btn">← Back</a>
+    
+    <div class="container">
+        <div class="header">
+            <h1>🎣 Phishing Detection System</h1>
+            <p>AI-powered email security analysis</p>
+        </div>
+
+        <div class="analyzer">
+            <h2>Email Analyzer</h2>
+            <form id="analyzeForm">
+                <div class="form-group">
+                    <label>Sender Email:</label>
+                    <input type="email" id="sender" placeholder="sender@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Subject:</label>
+                    <input type="text" id="subject" placeholder="Email subject">
+                </div>
+                <div class="form-group">
+                    <label>Email Content:</label>
+                    <textarea id="emailText" rows="6" placeholder="Paste email content here..."></textarea>
+                </div>
+                <button type="submit" class="analyze-btn">Analyze Email</button>
+            </form>
+        </div>
+
+        <div class="results">
+            <h2>Analysis Results</h2>
+            <div id="resultsContainer">
+                <p style="color: rgba(255,255,255,0.6);">No analysis results yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('analyzeForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const data = {
+                sender: document.getElementById('sender').value,
+                subject: document.getElementById('subject').value,
+                email_text: document.getElementById('emailText').value
+            };
+            
+            try {
+                const response = await fetch('http://localhost:5001/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                document.getElementById('resultsContainer').innerHTML = `
+                    <div class="result-item">
+                        <h3>Prediction: ${result.prediction.toUpperCase()}</h3>
+                        <p>Confidence: ${(result.confidence * 100).toFixed(1)}%</p>
+                        <p>Threat Level: ${result.threat_level}</p>
+                        <p>Analyzed: ${new Date().toLocaleString()}</p>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('resultsContainer').innerHTML = `
+                    <div class="result-item">
+                        <h3>Error</h3>
+                        <p>Could not analyze email. Please check if the API is running.</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>

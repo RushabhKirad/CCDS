@@ -14,7 +14,27 @@ class FastFileHandler(FileSystemEventHandler):
         self.threat_detector = threat_detector
         self.event_cache = defaultdict(list)
         self.last_process_time = time.time()
-        self.batch_size = 50
+        self.batch_size = 20  # Reduced for faster response
+        
+    def on_opened(self, event):
+        """Detect when files/folders are opened"""
+        event_type = 'folder_open' if event.is_directory else 'file_open'
+        self.threat_detector.check_file_access_fast(event.src_path, event_type, time.time())
+    
+    def on_modified(self, event):
+        """Detect when files/folders are modified"""
+        event_type = 'folder_modify' if event.is_directory else 'file_modify'
+        self.threat_detector.check_file_access_fast(event.src_path, event_type, time.time())
+    
+    def on_created(self, event):
+        """Detect when files/folders are created"""
+        event_type = 'folder_create' if event.is_directory else 'file_create'
+        self.threat_detector.check_file_access_fast(event.src_path, event_type, time.time())
+    
+    def on_moved(self, event):
+        """Detect when files/folders are moved"""
+        event_type = 'folder_move' if event.is_directory else 'file_move'
+        self.threat_detector.check_file_access_fast(event.src_path, event_type, time.time())
         
     def on_any_event(self, event):
         if event.is_directory:
@@ -28,7 +48,7 @@ class FastFileHandler(FileSystemEventHandler):
         
         # Process batch if cache is full or time elapsed
         if (len(self.event_cache) >= self.batch_size or 
-            time.time() - self.last_process_time > 2):
+            time.time() - self.last_process_time > 1):
             self.process_batch()
     
     def process_batch(self):
@@ -71,13 +91,28 @@ class FastUSBMonitor:
                 # Check for new USB devices
                 new_drives = current_drives - self.known_drives
                 for drive in new_drives:
-                    if self._is_usb_drive(drive):
-                        self.threat_detector.handle_usb_connection_fast(drive)
+                    try:
+                        drive_type = win32file.GetDriveType(drive)
+                        if drive_type == win32file.DRIVE_REMOVABLE:
+                            # Get USB label
+                            try:
+                                volume_info = win32api.GetVolumeInformation(drive)
+                                label = volume_info[0] if volume_info and volume_info[0] else "USB Device"
+                            except:
+                                label = "USB Device"
+                            
+                            device_info = {'drive': drive, 'label': label, 'type': 'USB Storage'}
+                            self.threat_detector.handle_usb_connection_fast(drive, device_info)
+                            logging.warning(f"USB CONNECTED: {drive} ({label})")
+                    except Exception as e:
+                        logging.error(f"Error checking new drive {drive}: {e}")
                 
                 # Check for removed USB devices
                 removed_drives = self.known_drives - current_drives
                 for drive in removed_drives:
+                    # Check if it was a USB drive by checking if it was removable
                     self.threat_detector.handle_usb_disconnection_fast(drive)
+                    logging.warning(f"USB REMOVED: {drive}")
                 
                 self.known_drives = current_drives
                 time.sleep(self.check_interval)
@@ -88,10 +123,21 @@ class FastUSBMonitor:
     
     def _is_usb_drive(self, drive):
         try:
+            if not drive or len(drive) < 2:
+                return False, None
+                
             drive_type = win32file.GetDriveType(drive)
-            return drive_type == win32file.DRIVE_REMOVABLE
-        except:
-            return False
+            if drive_type == win32file.DRIVE_REMOVABLE:
+                try:
+                    volume_info = win32api.GetVolumeInformation(drive)
+                    label = volume_info[0] if volume_info and volume_info[0] else "USB Drive"
+                    return True, label
+                except Exception:
+                    return True, "USB Device"
+            return False, None
+        except Exception as e:
+            logging.error(f"USB drive check error: {e}")
+            return False, None
     
     def update_known_drives(self):
         drives = win32api.GetLogicalDriveStrings()
@@ -151,8 +197,8 @@ class FastProcessMonitor:
         self.monitoring = False
         self.known_processes = set()
         self.suspicious_processes = [
-            'powershell.exe', 'cmd.exe', 'putty.exe', 'winscp.exe',
-            'filezilla.exe', 'rsync.exe', 'scp.exe', 'psexec.exe'
+            'putty.exe', 'winscp.exe', 'filezilla.exe', 
+            'rsync.exe', 'scp.exe', 'psexec.exe', 'nc.exe'
         ]
         
     def start_monitoring(self):
@@ -219,11 +265,15 @@ class FastMonitoringSystem:
     def start_all_monitoring(self):
         """Start all fast monitoring components"""
         try:
-            # Start file monitoring
-            drives_to_monitor = ['C:\\', 'D:\\', 'E:\\']
-            for drive in drives_to_monitor:
-                if os.path.exists(drive):
-                    self.file_observer.schedule(self.file_handler, drive, recursive=True)
+            # Start file monitoring - monitor key directories
+            monitor_dirs = ['C:\\Users', 'C:\\confidential', 'C:\\sensitive', 'C:\\$Recycle.Bin', 'D:\\', 'E:\\']
+            for directory in monitor_dirs:
+                if os.path.exists(directory):
+                    try:
+                        self.file_observer.schedule(self.file_handler, directory, recursive=True)
+                        logging.info(f"Monitoring: {directory}")
+                    except Exception as e:
+                        logging.error(f"Failed to monitor {directory}: {e}")
             
             self.file_observer.start()
             

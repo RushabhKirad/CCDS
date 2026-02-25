@@ -1,0 +1,339 @@
+:root {
+    --bg-dark: #0a0b10;
+    --classical-primary: #ff4d4d;
+    --classical-secondary: #ff9900;
+    --pqc-primary: #00d2ff;
+    --pqc-secondary: #9d50bb;
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --text-main: #e0e0e0;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    overflow: hidden;
+    height: 100vh;
+}
+
+h1,
+h2,
+h3,
+.algo-badge {
+    font-family: 'Orbitron', sans-serif;
+}
+
+.glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 15px;
+}
+
+/* Background Animation */
+.background-animation {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    background: radial-gradient(circle at center, #1a1b2e 0%, #0a0b10 100%);
+}
+
+/* Login Page */
+.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.login-container {
+    width: 400px;
+    padding: 40px;
+    text-align: center;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+}
+
+.login-header h1 {
+    font-size: 2.5rem;
+    color: var(--pqc-primary);
+    margin-bottom: 10px;
+    text-shadow: 0 0 10px rgba(0, 191, 255, 0.5);
+}
+
+.login-header p {
+    font-size: 0.9rem;
+    opacity: 0.7;
+    margin-bottom: 30px;
+}
+
+.input-group {
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    color: white;
+    font-size: 1rem;
+}
+
+button {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+#login-btn {
+    background: linear-gradient(45deg, var(--pqc-primary), var(--pqc-secondary));
+    color: white;
+    margin-top: 10px;
+    box-shadow: 0 0 15px rgba(0, 210, 255, 0.3);
+}
+
+#login-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 25px rgba(0, 210, 255, 0.5);
+}
+
+/* Dashboard Overlay */
+#dashboard-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-dark);
+    z-index: 100;
+    padding: 20px;
+    overflow-y: auto;
+    transition: opacity 0.5s ease;
+}
+
+.hidden {
+    display: none !important;
+    opacity: 0;
+}
+
+.dashboard-content {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.secondary-btn {
+    width: auto;
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid var(--pqc-primary);
+    color: var(--pqc-primary);
+    font-size: 0.8rem;
+}
+
+.close-btn {
+    width: auto;
+    font-size: 2rem;
+    background: transparent;
+    color: white;
+    padding: 0 10px;
+}
+
+.simulation-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 40px;
+}
+
+.pipeline-section {
+    padding: 20px;
+    border-radius: 15px;
+    height: 600px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.pipeline-section h3 {
+    margin-bottom: 15px;
+}
+
+.algo-badge {
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    margin-bottom: 20px;
+}
+
+.classical h3 {
+    color: var(--classical-primary);
+}
+
+.classical .algo-badge {
+    background: rgba(255, 77, 77, 0.2);
+    border: 1px solid var(--classical-primary);
+    color: var(--classical-primary);
+}
+
+.pqc h3 {
+    color: var(--pqc-primary);
+}
+
+.pqc .algo-badge {
+    background: rgba(0, 210, 255, 0.2);
+    border: 1px solid var(--pqc-primary);
+    color: var(--pqc-primary);
+}
+
+.flowchart-container {
+    width: 100%;
+    flex-grow: 1;
+    position: relative;
+    overflow-y: auto;
+    padding: 20px 0;
+}
+
+svg {
+    width: 100%;
+    min-height: 700px;
+}
+
+/* Table */
+.comparison-table-container {
+    padding: 20px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.text-classical {
+    color: var(--classical-primary);
+}
+
+.text-pqc {
+    color: var(--pqc-primary);
+}
+
+/* Animation Styles */
+.node {
+    fill: #1a1b2e;
+    stroke-width: 2;
+    transition: all 0.5s ease;
+}
+
+.classical .node {
+    stroke: var(--classical-primary);
+}
+
+.pqc .node {
+    stroke: var(--pqc-primary);
+}
+
+.node.active {
+    fill: rgba(255, 255, 255, 0.1);
+    stroke-width: 4;
+}
+
+.classical .node.active {
+    filter: drop-shadow(0 0 10px var(--classical-primary));
+}
+
+.pqc .node.active {
+    filter: drop-shadow(0 0 10px var(--pqc-primary));
+}
+
+.edge {
+    fill: none;
+    stroke-width: 2;
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+}
+
+.classical .edge {
+    stroke: var(--classical-secondary);
+}
+
+.pqc .edge {
+    stroke: var(--pqc-secondary);
+}
+
+.edge.animate {
+    animation: dash 2s linear forwards;
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+.node-text {
+    fill: white;
+    font-size: 14px;
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+.data-label {
+    fill: rgba(255, 255, 255, 0.6);
+    font-size: 11px;
+    font-family: monospace;
+}
+
+.result-banner {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 15px 40px;
+    background: linear-gradient(45deg, #00c853, #b2ff59);
+    border-radius: 50px;
+    color: #003300;
+    font-weight: bold;
+    font-family: 'Orbitron', sans-serif;
+    box-shadow: 0 0 30px rgba(0, 200, 83, 0.5);
+    z-index: 200;
+}

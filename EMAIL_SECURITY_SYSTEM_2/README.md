@@ -13,7 +13,7 @@ Access: http://localhost:5000 (admin/admin123)
 
 ## ✨ Features
 
-- **AI Phishing Detection**: 5 ML models, 99.8% accuracy
+- **AI Phishing Detection**: TF-IDF + Naive Bayes, 94.95% accuracy (computed on 28,101 test samples)
 - **Multi-User Support**: Gmail integration per user
 - **Encryption**: Fernet-based credential encryption
 - **RESTful API**: Integration-ready endpoints

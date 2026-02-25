@@ -97,24 +97,11 @@ class USBMonitor:
                 time.sleep(5)
     
     def _is_removable_drive(self, drive):
-        """Check if drive is removable (USB/Mobile)"""
+        """Check if drive is removable (USB)"""
         try:
             drive_type = win32file.GetDriveType(drive)
-            if drive_type == win32file.DRIVE_REMOVABLE:
-                return True
-            
-            # Additional check for MTP/PTP devices (mobile phones)
-            import wmi
-            c = wmi.WMI()
-            for item in c.Win32_DiskDrive():
-                if 'USB' in item.InterfaceType or 'Portable Device' in item.Caption:
-                    for partition in item.associators("Win32_DiskDriveToDiskPartition"):
-                        for logical_disk in partition.associators("Win32_LogicalDiskToPartition"):
-                            if logical_disk.Caption == drive:
-                                return True
-            return False
-        except Exception as e:
-            logging.error(f"Error checking removable drive: {e}")
+            return drive_type == win32file.DRIVE_REMOVABLE
+        except:
             return False
 
 class FileMonitor:

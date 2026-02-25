@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from core.database import DatabaseManager
 from core.behavioral_ai import BehavioralAI
 from config import ALERT_CONFIG, MODEL_CONFIG
+from notifications import SystemNotifications
 import logging
 
 class ThreatDetector:
@@ -10,104 +11,64 @@ class ThreatDetector:
         self.ai = BehavioralAI(self.db)
         self.failed_login_attempts = {}
         
-    def handle_usb_connection(self, drive_path, device_info=None):
-        """Handle USB/mobile device connection"""
+    def handle_usb_connection(self, drive_path):
+        """Handle USB device connection"""
         try:
             current_user_id = self.get_current_user_id()
             
-            if device_info is None:
-                device_info = {'type': 'Unknown Device', 'name': 'Unknown'}
-                
-            # Determine severity based on device type
-            severity = 'high' if device_info.get('type') == 'Mobile Device' else 'medium'
-            
-            # Log device connection with detailed info
+            # Log USB connection
             self.db.log_activity(
                 current_user_id, 
-                'device_connect',
-                device_info=device_info,
+                'usb_connect',
+                device_info=drive_path,
                 outcome='success'
             )
             
-            # Create detailed alert
-            device_name = device_info.get('name', 'Unknown Device')
-            device_type = device_info.get('type', 'Unknown Type')
-            manufacturer = device_info.get('manufacturer', 'Unknown Manufacturer')
-            
-            alert_title = f'{device_type} Connected'
-            alert_description = (
-                f"{device_type} detected:\n"
-                f"Name: {device_name}\n"
-                f"Manufacturer: {manufacturer}\n"
-                f"Location: {drive_path}"
-            )
-            
+            # Create alert for USB connection
             self.db.create_alert(
                 current_user_id,
-                'device_connection',
-                severity,
-                alert_title,
-                alert_description,
-                {
-                    'drive_path': drive_path,
-                    'device_info': device_info,
-                    'timestamp': datetime.now().isoformat()
-                }
+                'usb_connection',
+                'high',
+                'USB Device Connected',
+                f'USB device connected at {drive_path}',
+                {'drive_path': drive_path, 'timestamp': datetime.now().isoformat()}
             )
             
-            logging.warning(
-                f"DEVICE ALERT: {device_type} connected\n"
-                f"Details: {json.dumps(device_info, indent=2)}"
-            )
+            # Show single popup notification
+            SystemNotifications.show_usb_alert(drive_path)
+            
+            logging.warning(f"USB ALERT: Device connected at {drive_path}")
             
         except Exception as e:
-            logging.error(f"Device connection handling error: {e}")
-    
-    def handle_usb_disconnection(self, drive_path, device_info=None):
-        """Handle USB/mobile device disconnection"""
-        try:
-            current_user_id = self.get_current_user_id()
-            
-            if device_info is None:
-                device_info = {'type': 'Unknown Device', 'name': 'Unknown'}
-            
-            # Log device disconnection with details
-            self.db.log_activity(
-                current_user_id,
-                'device_disconnect',
-                device_info=device_info,
-                outcome='success'
-            )
-            
-            device_type = device_info.get('type', 'Unknown Type')
-            device_name = device_info.get('name', 'Unknown Device')
-            
-            logging.info(
-                f"Device disconnected: {device_type}\n"
-                f"Name: {device_name}\n"
-                f"Location: {drive_path}"
-            )
-            
-        except Exception as e:
-            logging.error(f"Device disconnection handling error: {e}")
+            logging.error(f"USB connection handling error: {e}")
     
     def handle_usb_disconnection(self, drive_path):
-        """Handle USB/Mobile device disconnection"""
+        """Handle USB device disconnection"""
         try:
             current_user_id = self.get_current_user_id()
             
-            # Log device disconnection
+            # Log USB disconnection
             self.db.log_activity(
                 current_user_id,
-                'device_disconnect',
-                device_info={'path': drive_path},
+                'usb_disconnect',
+                device_info=drive_path,
                 outcome='success'
             )
             
-            logging.info(f"Device disconnected: {drive_path}")
+            # Create alert for USB removal
+            self.db.create_alert(
+                current_user_id,
+                'usb_disconnection',
+                'low',
+                'USB Device Removed',
+                f'USB device safely removed from {drive_path}',
+                {'drive_path': drive_path, 'timestamp': datetime.now().isoformat()}
+            )
+            
+            logging.info(f"USB disconnected: {drive_path}")
             
         except Exception as e:
-            logging.error(f"Device disconnection handling error: {e}")
+            logging.error(f"USB disconnection handling error: {e}")
     
     def handle_restricted_access(self, user_id, file_path, event_type):
         """Handle access to restricted files"""
@@ -125,11 +86,16 @@ class ThreatDetector:
             self.db.create_alert(
                 user_id,
                 'restricted_access',
-                'high',
+                'critical',
                 'Restricted File Access Attempt',
                 f'Attempted {event_type} on restricted file: {file_path}',
                 {'file_path': file_path, 'event_type': event_type}
             )
+            
+
+            
+            # Show single popup notification
+            SystemNotifications.show_file_restriction_alert(file_path, event_type)
             
             logging.critical(f"RESTRICTED ACCESS BLOCKED: {file_path} by user {user_id}")
             
@@ -301,37 +267,62 @@ class ThreatDetector:
     def check_file_access_fast(self, file_path, event_type, timestamp):
         """Fast file access checking with minimal overhead"""
         try:
+            if not file_path or not isinstance(file_path, str):
+                return
+                
             current_user_id = self.get_current_user_id()
             
-            # Quick restriction check
-            restricted_paths = ['C:\\Windows\\System32\\config', 'C:\\confidential', 'C:\\sensitive']
-            is_restricted = any(file_path.startswith(path) for path in restricted_paths)
+            # Get restricted paths from database
+            restricted_paths = self.get_restricted_paths()
+            
+            # Check if file path matches any restricted path
+            is_restricted = False
+            for restricted_path in restricted_paths:
+                if file_path.lower().startswith(restricted_path.lower()):
+                    is_restricted = True
+                    break
             
             if is_restricted:
                 self.handle_restricted_access(current_user_id, file_path, event_type)
-            else:
-                # Log with minimal processing
-                self.db.log_activity(current_user_id, event_type, file_path=file_path, outcome='success')
+                logging.warning(f"RESTRICTED ACCESS DETECTED: {event_type} on {file_path}")
                 
         except Exception as e:
             logging.error(f"Fast file access check error: {e}")
     
-    def handle_usb_connection_fast(self, drive_path):
+    def handle_usb_connection_fast(self, drive_path, device_info=None):
         """Fast USB connection handling"""
         try:
+            if not drive_path:
+                return
+                
             current_user_id = self.get_current_user_id()
             
-            # Immediate alert creation
-            self.db.create_alert(
+            if device_info and isinstance(device_info, dict):
+                label = device_info.get('label', 'USB Device')
+                device_type = device_info.get('type', 'USB Storage')
+                title = f'{device_type} Connected: {label}'
+                description = f'{device_type} "{label}" connected at {drive_path}'
+            else:
+                title = 'USB Device Connected'
+                description = f'USB device connected at {drive_path}'
+            
+            # Create alert
+            alert_id = self.db.create_alert(
                 current_user_id,
                 'usb_connection',
-                'high',  # Elevated severity for fast detection
-                'USB Device Connected (Fast Detection)',
-                f'USB device connected at {drive_path} - Immediate detection',
-                {'drive_path': drive_path, 'detection_type': 'fast'}
+                'high',
+                title,
+                description,
+                {'drive_path': drive_path, 'device_info': device_info, 'detection_type': 'fast'}
             )
             
-            logging.warning(f"FAST USB ALERT: Device connected at {drive_path}")
+            if alert_id:
+                # Show single popup notification
+                device_name = device_info.get('label', 'USB Device') if isinstance(device_info, dict) else 'USB Device'
+                SystemNotifications.show_usb_alert(drive_path, device_name)
+                logging.warning(f"USB CONNECTION ALERT: {title} at {drive_path} - Alert ID: {alert_id}")
+            else:
+                logging.warning(f"Failed to create USB connection alert for {drive_path}")
             
         except Exception as e:
             logging.error(f"Fast USB connection handling error: {e}")
@@ -339,9 +330,29 @@ class ThreatDetector:
     def handle_usb_disconnection_fast(self, drive_path):
         """Fast USB disconnection handling"""
         try:
+            if not drive_path:
+                return
+                
             current_user_id = self.get_current_user_id()
+            
+            # Log disconnection
             self.db.log_activity(current_user_id, 'usb_disconnect', device_info=drive_path)
-            logging.info(f"FAST USB: Disconnected {drive_path}")
+            
+            # Create removal alert
+            alert_id = self.db.create_alert(
+                current_user_id,
+                'usb_disconnection',
+                'info',
+                'USB Device Removed',
+                f'USB device safely removed from {drive_path}',
+                {'drive_path': drive_path, 'detection_type': 'fast'}
+            )
+            
+            if alert_id:
+                logging.info(f"USB REMOVAL ALERT: {drive_path} - Alert ID: {alert_id}")
+            else:
+                logging.warning(f"Failed to create USB removal alert for {drive_path}")
+                
         except Exception as e:
             logging.error(f"Fast USB disconnection error: {e}")
     
@@ -360,6 +371,8 @@ class ThreatDetector:
                     f'Massive data transfer: {total_bytes/1024/1024:.1f}MB on {interface}',
                     {'bytes_transferred': total_bytes, 'interface': interface}
                 )
+                
+
                 
                 logging.critical(f"FAST NETWORK ALERT: {total_bytes/1024/1024:.1f}MB transfer")
                 
@@ -384,6 +397,19 @@ class ThreatDetector:
             
         except Exception as e:
             logging.error(f"Fast process detection error: {e}")
+    
+    def get_restricted_paths(self):
+        """Get list of restricted paths from database"""
+        try:
+            if self.db:
+                restricted = self.db.get_restricted_resources()
+                if restricted:
+                    return [r['resource_path'] for r in restricted]
+            # Default restricted paths if database unavailable
+            return ['C:\\confidential', 'C:\\sensitive', 'C:\\restricted']
+        except Exception as e:
+            logging.error(f"Error getting restricted paths: {e}")
+            return ['C:\\confidential', 'C:\\sensitive', 'C:\\restricted']
     
     def close(self):
         """Close database connections"""

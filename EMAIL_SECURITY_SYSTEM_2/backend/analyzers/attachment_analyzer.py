@@ -20,6 +20,72 @@ FEATURES = [
 
 TARGET = 'class'  # Benign / Malicious
 
+def extract_features(file_path):
+    """Extracts features from a PDF file for the model."""
+    import PyPDF2
+    import re
+    
+    features = {k: 0 for k in FEATURES}
+    
+    try:
+        if not os.path.exists(file_path):
+            return list(features.values())
+            
+        file_size = os.path.getsize(file_path)
+        features['pdf_size'] = file_size
+        
+        with open(file_path, 'rb') as f:
+            try:
+                pdf = PyPDF2.PdfReader(f)
+                features['pages'] = len(pdf.pages)
+                features['isEncrypted'] = 1 if pdf.is_encrypted else 0
+                
+                # Metadata analysis
+                if pdf.metadata:
+                    features['metadata_size'] = len(str(pdf.metadata))
+                    if pdf.metadata.title:
+                        features['title_characters'] = len(pdf.metadata.title)
+                
+                # Content analysis (simplified for speed)
+                content = ""
+                for page in pdf.pages[:5]: # Check first 5 pages
+                    try:
+                        text = page.extract_text()
+                        if text:
+                            features['contains_text'] = 1
+                            content += text
+                    except:
+                        pass
+                
+                # Keyword search in raw content (better done on raw bytes but using text for now)
+                # For deeper analysis we would scan raw bytes for PDF objects
+                # Here we simulate detection of common malicious keywords in PDF structure
+                # In a real scenario, we'd parse the PDF structure for /JS, /OpenAction etc.
+                
+                # Reading raw bytes for keyword search
+                f.seek(0)
+                raw_content = f.read()
+                
+                keywords = {
+                    'JS': b'/JS', 'Javascript': b'/JavaScript', 'AA': b'/AA', 
+                    'OpenAction': b'/OpenAction', 'Acroform': b'/AcroForm', 
+                    'JBIG2Decode': b'/JBIG2Decode', 'RichMedia': b'/RichMedia', 
+                    'launch': b'/Launch', 'EmbeddedFile': b'/EmbeddedFile', 
+                    'XFA': b'/XFA', 'URI': b'/URI', 'Colors': b'/Colors'
+                }
+                
+                for key, pattern in keywords.items():
+                    if pattern in raw_content:
+                        features[key] = 1
+                        
+            except Exception as e:
+                print(f"PDF parsing error: {e}")
+                
+    except Exception as e:
+        print(f"Feature extraction error: {e}")
+        
+    return list(features.values())
+
 def preprocess_features(df):
     # Replace Yes/No with 1/0
     yes_no_cols = ['isEncrypted', 'contains_text', 'JS', 'Javascript', 'AA', 

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,13 +8,15 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
+
 <body>
     <div class="animated-bg"></div>
     <div class="sparkles"></div>
-    
+
     <nav class="navbar">
         <div class="nav-brand">
-            <span class="logo">🛡️</span>
+            <img src="images\20260129_185056_0000.png" alt="CCDS Logo" class="logo"
+                style="width: 40px; height: 40px; margin-right: 10px;">
             <span class="brand-text">Cognitive Cyber Defense System</span>
         </div>
         <div class="nav-right">
@@ -38,7 +41,8 @@
         <div class="hero-content">
             <h1>Cognitive Cyber Defense System<br><span class="subtitle-text">AI-Driven Security</span></h1>
             <p class="hero-subtitle">The integrated defense platform built to defeat today's advanced cyber threats.</p>
-            <p>Defend your digital frontier with multi-layered machine learning designed for comprehensive threat detection and response.</p>
+            <p>Defend your digital frontier with multi-layered machine learning designed for comprehensive threat
+                detection and response.</p>
             <p>Join us in shaping the future of cybersecurity.</p>
         </div>
     </section>
@@ -46,25 +50,28 @@
     <section id="features" class="features-section">
         <h2>The Three Pillars of AI-Driven Defense</h2>
         <div class="features-grid">
-            <div class="feature-card" onclick="loadModule('anomaly')">
+            <div class="feature-card">
                 <div class="card-icon"><i class="fas fa-search"></i></div>
                 <h3>Real-Time Traffic Anomaly</h3>
-                <p>Identifies and flags unusual system behavior, data access, or network traffic deviations, leveraging ML to detect zero-day attacks and compromised user accounts.</p>
-                <button class="explore-btn">Explore →</button>
+                <p>Identifies and flags unusual system behavior, data access, or network traffic deviations, leveraging
+                    ML to detect zero-day attacks and compromised user accounts.</p>
+                <button class="explore-btn" onclick="window.open('http://localhost:3030', '_blank')">Explore</button>
             </div>
 
-            <div class="feature-card" onclick="loadModule('email')">
+            <div class="feature-card">
                 <div class="card-icon"><i class="fas fa-envelope-open-text"></i></div>
                 <h3>Advanced Email Security & Phishing Detection</h3>
-                <p>AI-powered email analysis with 5 ML models achieving 99.8% accuracy. Features post-quantum cryptography and real-time Gmail integration for comprehensive email threat detection.</p>
-                <button class="explore-btn">Explore →</button>
+                <p>AI-powered email analysis with 5 ML models achieving 99.8% accuracy. Features post-quantum
+                    cryptography and real-time Gmail integration for comprehensive email threat detection.</p>
+                <button class="explore-btn" onclick="window.open('http://localhost:5000', '_blank')">Explore</button>
             </div>
 
-            <div class="feature-card" onclick="loadModule('insider')">
+            <div class="feature-card">
                 <div class="card-icon"><i class="fas fa-user-shield"></i></div>
                 <h3>Insider Threat Detection & Behavioral Analysis</h3>
-                <p>LSTM-based behavioral learning system that monitors file access, USB connections, and user patterns. Detects anomalies and prevents data exfiltration through continuous AI analysis.</p>
-                <button class="explore-btn">Explore →</button>
+                <p>LSTM-based behavioral learning system that monitors file access, USB connections, and user patterns.
+                    Detects anomalies and prevents data exfiltration through continuous AI analysis.</p>
+                <button class="explore-btn" onclick="window.open('http://localhost:5050', '_blank')">Explore</button>
             </div>
         </div>
     </section>
@@ -75,37 +82,43 @@
             <div class="why-card">
                 <div class="why-icon"><i class="fas fa-brain"></i></div>
                 <h3>🚀 AI-Powered Decision Making</h3>
-                <p>Advanced machine learning algorithms that adapt and learn from threats in real-time, providing proactive defense rather than reactive responses.</p>
+                <p>Advanced machine learning algorithms that adapt and learn from threats in real-time, providing
+                    proactive defense rather than reactive responses.</p>
             </div>
 
             <div class="why-card">
                 <div class="why-icon"><i class="fas fa-chart-line"></i></div>
                 <h3>📊 Real-time Monitoring & Alerts</h3>
-                <p>Continuous monitoring with instant alerts for anomalies across network, system, and user activities—keeping you ahead of cyber threats.</p>
+                <p>Continuous monitoring with instant alerts for anomalies across network, system, and user
+                    activities—keeping you ahead of cyber threats.</p>
             </div>
 
             <div class="why-card">
                 <div class="why-icon"><i class="fas fa-shield-alt"></i></div>
                 <h3>🛡️ Multi-Layered Defense</h3>
-                <p>Combines network traffic analysis, phishing detection, and user behavior monitoring to cover all attack vectors.</p>
+                <p>Combines network traffic analysis, phishing detection, and user behavior monitoring to cover all
+                    attack vectors.</p>
             </div>
 
             <div class="why-card">
                 <div class="why-icon"><i class="fas fa-user-lock"></i></div>
                 <h3>🔒 Insider Threat Prevention</h3>
-                <p>Detects unusual user behavior patterns and prevents data leaks or privilege misuse before damage occurs.</p>
+                <p>Detects unusual user behavior patterns and prevents data leaks or privilege misuse before damage
+                    occurs.</p>
             </div>
 
             <div class="why-card">
                 <div class="why-icon"><i class="fas fa-robot"></i></div>
                 <h3>🤖 Automated Response</h3>
-                <p>Smart AI modules take immediate mitigation actions when threats are detected, reducing human dependency for rapid response.</p>
+                <p>Smart AI modules take immediate mitigation actions when threats are detected, reducing human
+                    dependency for rapid response.</p>
             </div>
 
             <div class="why-card">
                 <div class="why-icon"><i class="fas fa-globe"></i></div>
                 <h3>🌐 Comprehensive Threat Coverage</h3>
-                <p>Protects endpoints, network traffic, emails, and URLs using AI-driven anomaly detection and predictive analytics.</p>
+                <p>Protects endpoints, network traffic, emails, and URLs using AI-driven anomaly detection and
+                    predictive analytics.</p>
             </div>
         </div>
     </section>
@@ -153,7 +166,8 @@
         <div class="contact-content">
             <p>Interested in our cognitive cyber defense solutions?</p>
             <div class="contact-links">
-                <a href="https://github.com/SamyakBhongade/Cognitive-Cyber-Defense-System" class="contact-link" target="_blank">
+                <a href="https://github.com/SamyakBhongade/Cognitive-Cyber-Defense-System" class="contact-link"
+                    target="_blank">
                     <i class="fab fa-github"></i> View on GitHub
                 </a>
                 <a href="#footer" class="contact-link">
@@ -247,4 +261,5 @@
 
     <script src="script.js"></script>
 </body>
+
 </html>

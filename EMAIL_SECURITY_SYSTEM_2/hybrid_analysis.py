@@ -1,6 +1,27 @@
 import re
 import os
 from backend.db.db_utils import execute_query, fetch_one
+from backend.analyzers.vision_analyzer import VisionAnalyzer
+from backend.analyzers.url_deep_analyzer import URLDeepAnalyzer
+from backend.analyzers.attachment_analyzer import extract_features
+from backend.analyzers.auth_header_analyzer import AuthHeaderAnalyzer
+# from backend.analyzers.bert_analyzer import BertAnalyzer # Commented out to prevent slow load on dev
+
+# Initialize analyzers
+vision_analyzer = VisionAnalyzer()
+url_deep_analyzer = URLDeepAnalyzer()
+auth_analyzer = AuthHeaderAnalyzer()
+# bert_analyzer = BertAnalyzer() # Initialize lazily or if enabled
+
+class HybridAnalyzer:
+    """Hybrid ML + Rule-based email analyzer class"""
+    
+    def __init__(self, model_loader=None):
+        self.model_loader = model_loader
+    
+    def analyze_email(self, email_id, email_text, subject):
+        """Analyze email using hybrid approach"""
+        return hybrid_analyze_email(email_id, email_text, subject, self.model_loader)
 
 def hybrid_analyze_email(email_id, email_text, subject, model_loader):
     """Hybrid ML + Rule-based email analysis for maximum accuracy"""
@@ -13,9 +34,34 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
         
         text_content = (email_text + " " + subject).lower()
         
+        # STEP 0a: AUTHENTICATION CHECKS (SPF/DKIM)
+        # We need headers for this. If not available, we skip.
+        # Assuming email_data might have headers in future.
+        auth_score_penalty = 0
+        if email_data and 'headers' in email_data and email_data['headers']:
+             auth_results = auth_analyzer.analyze_headers(email_data['headers'], sender.split('@')[-1])
+             auth_score_penalty = auth_results['score_penalty']
+             if auth_results['auth_warnings']:
+                 print(f"Auth Warnings: {auth_results['auth_warnings']}")
+
+        # STEP 0b: VISION ANALYSIS (OCR)
+        # If there are images in the email (not implemented in ingestion yet) or if attachment is an image
+        vision_text = ""
+        if attachment_path and os.path.exists(attachment_path):
+            ext = os.path.splitext(attachment_path)[1].lower()
+            if ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']:
+                print(f"Performing OCR on {os.path.basename(attachment_path)}...")
+                vision_result = vision_analyzer.analyze_image(attachment_path)
+                if vision_result['has_text']:
+                    vision_text = vision_result['extracted_text']
+                    print(f"OCR extracted {len(vision_text)} chars")
+                    # Append to text content for analysis
+                    text_content += " " + vision_text.lower()
+
         # STEP 1: HYBRID TEXT ANALYSIS (ML + Rules)
         text_ml_score = 0
         text_rule_score = 0
+        ml_available = False  # Track if ML is working
         
         # 1a. Text ML Analysis
         if model_loader and len(text_content.strip()) > 10:
@@ -24,10 +70,11 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
                 text_prediction = model_loader.text_model.predict_proba(text_vector)[0]
                 if len(text_prediction) > 1:
                     text_ml_score = text_prediction[1]
+                ml_available = True
                 print(f"Text ML Score: {text_ml_score:.3f}")
             except Exception as e:
                 print(f"Text ML error: {e}")
-                text_ml_score = 0.1
+                ml_available = False
         
         # 1b. Text Rule-based Analysis
         high_risk_patterns = [
@@ -35,23 +82,35 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
             r'(suspended|locked|blocked).*(account|access)',
             r'(click here|act now).*(urgent|immediately)',
             r'(winner|won|prize).*(lottery|million|inheritance)',
-            r'(transfer|claim).*(money|funds|prize)'
+            r'(transfer|claim).*(money|funds|prize)',
+            r'(urgent|immediately|expires|suspended).*24.*hours',
+            r'(ssn|social security|pin|cvv|credit card)',
+            r'(bank account|routing number|wire transfer)'
         ]
         
         for pattern in high_risk_patterns:
             if re.search(pattern, text_content):
-                text_rule_score += 0.25
+                text_rule_score += 0.20
         text_rule_score = min(1.0, text_rule_score)
         print(f"Text Rule Score: {text_rule_score:.3f}")
         
-        # 1c. Combine Text Scores (ML 70% + Rules 30%)
-        text_final_score = (text_ml_score * 0.7) + (text_rule_score * 0.3)
+        # 1c. BERT Analysis (Optional/Advanced)
+        bert_score = 0
+        
+        # 1d. Combine Text Scores - FALLBACK to rules if ML fails
+        if ml_available:
+            # ML 60% + Rules 40%
+            text_final_score = (text_ml_score * 0.6) + (text_rule_score * 0.4)
+        else:
+            # Rules only when ML fails
+            text_final_score = text_rule_score
         print(f"Text Combined: {text_final_score:.3f}")
         
         # STEP 2: HYBRID URL ANALYSIS (ML + Rules)
         url_ml_score = 0
         url_rule_score = 0
         url_final_score = 0
+        url_ml_available = False
         
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text_content)
         
@@ -64,30 +123,55 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
                         url_prediction = model_loader.url_model.predict_proba(url_vector)[0]
                         if len(url_prediction) > 1:
                             url_ml_score = max(url_ml_score, url_prediction[1])
+                    url_ml_available = True
                     print(f"URL ML Score: {url_ml_score:.3f}")
-                else:
-                    url_ml_score = 0.1
             except Exception as e:
                 print(f"URL ML error: {e}")
-                url_ml_score = 0.1
+                url_ml_available = False
             
-            # 2b. URL Rule-based Analysis
+            # 2b. URL Rule-based Analysis (EXPANDED PATTERNS)
             dangerous_patterns = [
                 r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b',  # IP addresses
                 r'(bit\.ly|tinyurl|short\.link|t\.co)',  # URL shorteners
-                r'(login|verify|secure|account).*\.(tk|ml|ga|cf)',  # Suspicious TLDs
+                r'(login|verify|secure|account|update|confirm).*\.(tk|ml|ga|cf|xyz|top|pw)',  # Suspicious TLDs
+                r'(paypal|bank|amazon|microsoft|apple|google).*(?!\.(com|org|net))',  # Fake brand domains
+                r'(fake|phish|scam|hack|verify|secure)[^/]*\.',  # Suspicious subdomains
+                r'\-verify|verify\-|\-secure|secure\-|\-login|login\-',  # Hyphened suspicious words
+                r'\@[^\s]+\.(tk|ml|ga|cf|xyz)',  # Email-like URLs with bad TLDs
             ]
             
             for url in urls:
+                url_lower = url.lower()
                 for pattern in dangerous_patterns:
-                    if re.search(pattern, url):
-                        url_rule_score += 0.4
+                    if re.search(pattern, url_lower):
+                        url_rule_score += 0.35
                         break
             url_rule_score = min(1.0, url_rule_score)
             print(f"URL Rule Score: {url_rule_score:.3f}")
             
-            # 2c. Combine URL Scores (ML 60% + Rules 40%)
-            url_final_score = (url_ml_score * 0.6) + (url_rule_score * 0.4)
+            # 2c. Deep URL Analysis (New) - wrapped in try-except
+            deep_url_score = 0
+            deep_risks = []
+            try:
+                for url in urls[:3]: # Analyze top 3 URLs to save time
+                    deep_analysis = url_deep_analyzer.analyze_url(url)
+                    if deep_analysis['score'] > 0:
+                        deep_url_score = max(deep_url_score, deep_analysis['score'])
+                        deep_risks.extend(deep_analysis['risk_factors'])
+                
+                if deep_risks:
+                    print(f"Deep URL Risks: {', '.join(deep_risks)}")
+                    # Boost rule score if deep analysis finds risks
+                    url_rule_score = min(1.0, url_rule_score + (deep_url_score * 0.5))
+            except Exception as e:
+                print(f"Deep URL analysis error: {e}")
+
+            # 2d. Combine URL Scores - FALLBACK to rules if ML fails
+            if url_ml_available:
+                url_final_score = (url_ml_score * 0.5) + (url_rule_score * 0.3) + (deep_url_score * 0.2)
+            else:
+                # Rules + Deep when ML fails
+                url_final_score = (url_rule_score * 0.7) + (deep_url_score * 0.3)
             print(f"URL Combined: {url_final_score:.3f}")
         
         # STEP 3: HYBRID ATTACHMENT ANALYSIS (ML + Rules)
@@ -101,11 +185,16 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
                 if model_loader and hasattr(model_loader, 'attachment_model'):
                     if os.path.exists(attachment_path):
                         file_size = os.path.getsize(attachment_path)
-                        # Simplified feature vector for attachment model
-                        features = [
-                            file_size, 0, 1, 0, len(os.path.basename(attachment_path)),
-                            0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-                        ]
+                        # Extract real features if PDF
+                        if attachment_path.lower().endswith('.pdf'):
+                            features = extract_features(attachment_path)
+                            print(f"Extracted PDF features: {features}")
+                        else:
+                            # Fallback for non-PDFs (simplified)
+                            features = [
+                                file_size, 0, 1, 0, len(os.path.basename(attachment_path)),
+                                0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                            ]
                         
                         attachment_prediction = model_loader.attachment_model.predict_proba([features])[0]
                         if len(attachment_prediction) > 1:
@@ -162,6 +251,10 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
                          url_final_score * url_weight + 
                          attachment_final_score * attachment_weight)
         
+        # Apply Auth Penalty
+        ensemble_score += auth_score_penalty
+        ensemble_score = min(1.0, ensemble_score)
+        
         print(f"Ensemble Score: {ensemble_score:.3f} (T:{text_weight}, U:{url_weight}, A:{attachment_weight})")
         
         # STEP 5: TRUST AND SAFETY ADJUSTMENTS
@@ -182,19 +275,21 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
             ensemble_score *= 0.6
             print(f"Safe content adjustment: {ensemble_score:.3f}")
         
-        # STEP 6: FINAL CLASSIFICATION WITH CONSERVATIVE THRESHOLDS
-        if ensemble_score >= 0.6:
+        # STEP 6: FINAL CLASSIFICATION WITH ADJUSTED THRESHOLDS
+        # Lowered threshold to 0.35 for better phishing detection when ML is unavailable
+        if ensemble_score >= 0.35:
             label = 'phishing'
-            confidence = min(0.95, 0.75 + (ensemble_score * 0.20))
+            confidence = min(0.95, 0.70 + (ensemble_score * 0.25))
         else:
             label = 'safe'
-            confidence = min(0.95, 0.75 + ((1 - ensemble_score) * 0.20))
+            confidence = min(0.95, 0.70 + ((1 - ensemble_score) * 0.25))
         
         # STEP 7: MULTI-LAYER VALIDATION (Reduce False Negatives)
+        # Override if any component has high score (lowered from 0.65 to 0.50)
         max_component_score = max(text_final_score, url_final_score, attachment_final_score)
-        if max_component_score >= 0.9 and ensemble_score < 0.6:
+        if max_component_score >= 0.50 and ensemble_score < 0.35:
             label = 'phishing'
-            confidence = 0.75
+            confidence = 0.80
             print(f"High component override: {max_component_score:.3f}")
         
         # STEP 8: GENERATE DETAILED THREAT EXPLANATION
@@ -226,6 +321,9 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
                         suspicious_urls.append(url)
                 if suspicious_urls:
                     threats.append(f"Suspicious URLs: {', '.join(suspicious_urls)}")
+            
+            if deep_risks:
+                threats.append(f"Deep URL Analysis: {', '.join(set(deep_risks))}")
             
             if attachment_path and attachment_final_score > 0.5:
                 threats.append(f"Suspicious attachment: {os.path.basename(attachment_path)}")

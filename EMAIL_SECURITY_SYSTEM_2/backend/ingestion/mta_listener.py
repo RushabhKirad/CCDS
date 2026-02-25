@@ -38,7 +38,7 @@ def get_last_email_date(user_email):
         return result['last_date']
     else:
         # If no emails exist, get emails from last 7 days
-        return datetime.datetime.now() - datetime.timedelta(days=7)
+        return datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=7)
 
 def fetch_emails(user_email=None, user_password=None):
     """Fetch emails newer than the last email in database (no duplicates)"""
@@ -66,6 +66,11 @@ def fetch_emails(user_email=None, user_password=None):
 
     # Get the last email date from database
     last_email_date = get_last_email_date(config['email'])
+    
+    # Ensure timezone awareness
+    if last_email_date and last_email_date.tzinfo is None:
+        last_email_date = last_email_date.replace(tzinfo=datetime.timezone.utc)
+        
     print(f"Last email in database: {last_email_date}")
     
     # Format date for Gmail search (Gmail uses DD-MMM-YYYY format)

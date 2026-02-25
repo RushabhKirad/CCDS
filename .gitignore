@@ -205,3 +205,20 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Large data files and models
+*.csv
+*.joblib
+*.pkl
+*.h5
+*.model
+*.weights
+*.pt
+*.pth
+processed/
+temp/
+test_results/
+results/
+recordings/
+*.mp4
+*.webp

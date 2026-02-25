@@ -7,7 +7,12 @@ DB_CONFIG = {
     'user': 'root',
     'password': 'samarth@2904',  # MySQL password
     'database': 'InsiderThreatDB',
-    'charset': 'utf8mb4'
+    'charset': 'utf8mb4',
+    'ssl_disabled': True,
+    'autocommit': True,
+    'connection_timeout': 60,
+    'pool_size': 5,
+    'pool_reset_session': False
 }
 
 # Security Configuration
@@ -33,9 +38,9 @@ ALERT_CONFIG = {
 # File Monitoring
 MONITORED_EXTENSIONS = ['.doc', '.docx', '.pdf', '.xls', '.xlsx', '.txt', '.key', '.pem', '.p12']
 RESTRICTED_PATHS = [
-    'C:\\Windows\\System32\\config',
     'C:\\confidential',
-    'C:\\sensitive'
+    'C:\\sensitive',
+    'C:\\classified'
 ]
 
 # System Paths

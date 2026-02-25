@@ -8,6 +8,10 @@ import hashlib
 import logging
 from logging.handlers import RotatingFileHandler
 from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor
+
+# Async Executor
+executor = ThreadPoolExecutor(max_workers=2)
 
 # Configure template and static directories
 template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "templates")
@@ -20,9 +24,9 @@ app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 try:
     from api_routes import api_bp
     app.register_blueprint(api_bp)
-    print("✓ Integration API routes registered at /email-security/api/v1")
+    print("Integration API routes registered at /email-security/api/v1")
 except Exception as e:
-    print(f"⚠️ Could not register API routes: {e}")
+    print(f"Could not register API routes: {e}")
 
 # Load configuration
 env = os.getenv('FLASK_ENV', 'development')
@@ -189,6 +193,11 @@ def admin_required(f):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
+
+@app.route("/about")
+def about():
+    """Explanation of the algorithm"""
+    return render_template("how_it_works.html")
 
 # 1. Login Page
 @app.route("/", methods=["GET", "POST"])
@@ -462,7 +471,17 @@ from hybrid_analysis import hybrid_analyze_email
 # Auto-analyze emails when fetched
 def analyze_email_content(email_id, email_text, subject):
     """Enhanced hybrid ML + rule-based email analysis"""
+    # Run in background if called from async context, but here we just call directly
+    # In a real async setup, we would submit this to executor
     return hybrid_analyze_email(email_id, email_text, subject, model_loader)
+
+def async_analyze_email(email_id, email_text, subject):
+    """Wrapper for async execution"""
+    with app.app_context():
+        try:
+            hybrid_analyze_email(email_id, email_text, subject, model_loader)
+        except Exception as e:
+            print(f"Async analysis failed: {e}")
 
 # 4. Analyze email endpoint - Using YOUR models
 @app.route("/analyze_email", methods=["POST"])
@@ -498,6 +517,30 @@ def analyze_email():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# 5. Feedback Loop
+@app.route("/api/feedback", methods=["POST"])
+@login_required
+def submit_feedback():
+    try:
+        data = request.get_json()
+        email_id = data.get('email_id')
+        feedback_type = data.get('feedback_type') # 'false_positive', 'false_negative'
+        
+        if not email_id or not feedback_type:
+            return jsonify({'success': False, 'error': 'Missing data'})
+            
+        # Update database
+        # We need to add a feedback column first (handled in init_database ideally, but we'll use logs for now)
+        execute_query("INSERT INTO logs (email_id, action, timestamp, user_email, details) VALUES (%s, %s, NOW(), %s, %s)", 
+                     (email_id, 'user_feedback', session.get('user_email'), f"User reported: {feedback_type}"))
+        
+        # In a real system, we would flag this email for re-training
+        print(f"Feedback received for email {email_id}: {feedback_type}")
+        
+        return jsonify({'success': True, 'message': 'Feedback received. We will use this to improve our models.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 
 # 6. Download attachment
@@ -672,6 +715,235 @@ def create_sample_emails():
         })
     except Exception as e:
         return jsonify({'error': str(e)})
+
+# TEST ROUTE: Create specific test emails (4 phishing + 1 normal)
+@app.route("/inject_test_emails")
+@login_required
+def inject_test_emails():
+    """Injects 5 test emails: 4 phishing + 1 normal for testing the detection system"""
+    try:
+        user_email = session.get('user_email') or session.get('email')
+        if not user_email:
+            return jsonify({'error': 'No user email found'})
+        
+        # 4 Phishing emails + 1 Normal email
+        test_emails = [
+            # PHISHING 1: Fake Bank Alert
+            {
+                'sender': 'security@bankofamerica-secure.xyz',
+                'subject': '⚠️ URGENT: Your Account Has Been Compromised!',
+                'body': '''Dear Valued Customer,
+
+We have detected suspicious activity on your Bank of America account. Your account has been temporarily limited.
+
+IMMEDIATE ACTION REQUIRED: Click the link below to verify your identity and restore full access:
+http://bankofamerica-secure.xyz/verify?user=1234
+
+If you do not verify within 24 hours, your account will be permanently suspended.
+
+Enter your:
+- Social Security Number
+- Account Number  
+- PIN
+- Mother's Maiden Name
+
+Best regards,
+Bank of America Security Team''',
+                'is_phishing': True
+            },
+            # PHISHING 2: Fake PayPal
+            {
+                'sender': 'support@paypal-verification.tk',
+                'subject': 'Your PayPal Account is Limited - Verify Now',
+                'body': '''Hello,
+
+We've noticed unusual sign-in activity on your PayPal account. As a security measure, we have temporarily limited your account.
+
+To restore your account, please confirm your information:
+>>> http://paypal-verification.tk/confirm <<<
+
+Required information:
+• Credit Card Number
+• CVV Code
+• Billing Address
+• Date of Birth
+
+Failure to verify will result in permanent account closure.
+
+PayPal Security Center''',
+                'is_phishing': True
+            },
+            # PHISHING 3: Fake Microsoft
+            {
+                'sender': 'admin@microsoft-365-alert.com',
+                'subject': '🔔 Microsoft 365: Password Expires in 24 Hours',
+                'body': '''Your Microsoft 365 password will expire in 24 hours.
+
+CLICK HERE TO KEEP YOUR PASSWORD: http://microsoft-365-alert.com/reset
+
+If you don't update your password immediately:
+- All emails will be deleted
+- OneDrive files will be lost
+- Teams access revoked
+
+Enter your current password and new password at the link above.
+
+Microsoft Support Team
+This is an automated message.''',
+                'is_phishing': True
+            },
+            # PHISHING 4: Prize Scam
+            {
+                'sender': 'winner@international-lottery.ml',
+                'subject': '🎉 CONGRATULATIONS! You Won $5,000,000 USD!!!',
+                'body': '''CONGRATULATIONS!!!
+
+Your email was randomly selected as the WINNER of the International Email Lottery!
+
+You have won: $5,000,000.00 USD
+
+To claim your prize, send the following to claim@lottery.ml:
+1. Full Name
+2. Bank Account Number
+3. Routing Number
+4. Copy of ID/Passport
+5. $500 processing fee via Western Union
+
+Reply within 48 hours or your prize goes to another winner!
+
+Dr. James Smith
+International Lottery Commission
+Lagos, Nigeria''',
+                'is_phishing': True
+            },
+            # NORMAL EMAIL: Legitimate newsletter
+            {
+                'sender': 'newsletter@techcrunch.com',
+                'subject': 'TechCrunch Daily: Top Tech News for January 29, 2026',
+                'body': '''Good morning!
+
+Here are today's top stories from TechCrunch:
+
+1. Apple announces new AI-powered features for iPhone 18
+2. Google Cloud introduces quantum computing services for enterprises  
+3. Tesla's new Robotaxi service launches in 5 more cities
+4. Microsoft reports record Q4 earnings
+
+Read more at techcrunch.com
+
+---
+You received this email because you subscribed to TechCrunch Daily.
+Unsubscribe: https://techcrunch.com/preferences
+123 Main Street, San Francisco, CA 94105''',
+                'is_phishing': False
+            }
+        ]
+        
+        created_count = 0
+        results = []
+        
+        for email_data in test_emails:
+            # Insert email into database
+            query = "INSERT INTO emails (sender, subject, body, user_email, is_read, created_at) VALUES (%s, %s, %s, %s, 0, NOW())"
+            result = execute_query(query, (
+                email_data['sender'], 
+                email_data['subject'], 
+                email_data['body'], 
+                user_email
+            ))
+            
+            if result:
+                created_count += 1
+                # Get the email ID
+                email_record = fetch_one(
+                    "SELECT id FROM emails WHERE sender = %s AND subject = %s ORDER BY id DESC LIMIT 1", 
+                    (email_data['sender'], email_data['subject'])
+                )
+                
+                if email_record:
+                    # Run ML analysis on the email
+                    analyze_email_content(email_record['id'], email_data['body'], email_data['subject'])
+                    
+                    # Get updated label
+                    updated_email = fetch_one("SELECT label, confidence_score FROM emails WHERE id = %s", (email_record['id'],))
+                    
+                    results.append({
+                        'id': email_record['id'],
+                        'sender': email_data['sender'],
+                        'subject': email_data['subject'][:50] + '...' if len(email_data['subject']) > 50 else email_data['subject'],
+                        'actual': 'phishing' if email_data['is_phishing'] else 'safe',
+                        'predicted': updated_email['label'] if updated_email else 'pending',
+                        'confidence': round(updated_email['confidence_score'] * 100, 1) if updated_email and updated_email['confidence_score'] else 0
+                    })
+        
+        return jsonify({
+            'success': True,
+            'message': f'Injected {created_count} test emails for {user_email}',
+            'total_emails': created_count,
+            'phishing_count': 4,
+            'normal_count': 1,
+            'results': results,
+            'note': 'Refresh your dashboard to see the test emails!'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+# 8. Direct File Analysis (Test Mode)
+@app.route("/test/upload", methods=["GET", "POST"])
+def test_upload():
+    if request.method == "GET":
+        return render_template("test_upload.html")
+    
+    if request.method == "POST":
+        try:
+            if 'file' not in request.files:
+                return jsonify({'success': False, 'error': 'No file uploaded'})
+            
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({'success': False, 'error': 'No file selected'})
+            
+            if file:
+                # Save to temp
+                filename = file.filename
+                filepath = os.path.join("attachments", filename)
+                file.save(filepath)
+                
+                print(f"Test Mode: Analyzing {filename}")
+                
+                # Create a dummy email wrapper
+                dummy_email_id = 999999 # Dummy ID
+                dummy_subject = f"Test Analysis of {filename}"
+                dummy_body = "This is a test analysis of an uploaded file."
+                
+                # Analyze
+                # We need to temporarily insert a dummy record or modify hybrid_analysis to accept path directly
+                # For simplicity, we'll insert a dummy record
+                execute_query("INSERT INTO emails (id, sender, subject, body, attachment_path, user_email, label) VALUES (%s, %s, %s, %s, %s, %s, 'pending') ON DUPLICATE KEY UPDATE attachment_path=%s", 
+                             (dummy_email_id, 'test@local', dummy_subject, dummy_body, filepath, 'test_user', filepath))
+                
+                label, confidence = analyze_email_content(dummy_email_id, dummy_body, dummy_subject)
+                
+                # Get OCR text if available (for display)
+                ocr_text = ""
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    from backend.analyzers.vision_analyzer import VisionAnalyzer
+                    va = VisionAnalyzer()
+                    res = va.analyze_image(filepath)
+                    ocr_text = res.get('extracted_text', '')
+                
+                return jsonify({
+                    'success': True,
+                    'prediction': label,
+                    'confidence': confidence,
+                    'message': f"File classified as {label}",
+                    'ocr_text': ocr_text
+                })
+                
+        except Exception as e:
+            print(f"Test upload error: {e}")
+            return jsonify({'success': False, 'error': str(e)})
 
 # Test Gmail connection
 @app.route("/test_gmail_connection")
@@ -865,6 +1137,12 @@ def delete_email(email_id):
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route("/how_it_works")
+def how_it_works():
+    user_email = session.get('user_email') or session.get('email')
+    stats = get_cached_stats(user_email) if user_email else {'total': 0, 'safe': 0, 'phishing': 0, 'pending': 0, 'starred': 0, 'unread': 0}
+    return render_template("how_it_works.html", stats=stats, current_folder='how_it_works')
 
 # Database debug route
 @app.route("/debug_db")
@@ -1259,163 +1537,7 @@ def upgrade_to_pqc():
         
         return jsonify({'success': False, 'error': str(e)})
 
-# Admin-Only Backend Process Monitor with PQC Key Details
-@app.route("/admin/backend_monitor")
-@app.route("/admin_backend_monitor")
-@admin_required
-def admin_backend_monitor():
-    """Admin-only detailed backend process monitoring with PQC keys"""
-    
-    # Get all system logs (not user-specific)
-    system_logs = fetch_all("""
-        SELECT l.*, e.subject, e.sender, u.username 
-        FROM logs l 
-        LEFT JOIN emails e ON l.email_id = e.id 
-        LEFT JOIN users u ON l.user_email = u.email
-        ORDER BY l.timestamp DESC 
-        LIMIT 50
-    """) or []
-    
-    # Get detailed PQC operations from logs
-    security_details = []
-    try:
-        # Get recent detailed PQC operations
-        recent_security_ops = fetch_all("""
-            SELECT action, user_email, details, timestamp
-            FROM logs 
-            WHERE action LIKE 'ENCRYPT_%" OR action LIKE "DECRYPT_%" OR action LIKE "KEY_%' 
-            AND timestamp > NOW() - INTERVAL 1 HOUR
-            ORDER BY timestamp DESC 
-            LIMIT 20
-        """) or []
-        
-        for op in recent_security_ops:
-            security_details.append({
-                'operation': op['action'],
-                'timestamp': op['timestamp'].strftime('%H:%M:%S') if op['timestamp'] else 'Unknown',
-                'details': op['details'],
-                'user': op['user_email']
-            })
-            
-        # Add system key info if no recent operations
-        if not security_details:
-            import os
-            import base64
-            import hashlib
-            
-            key_file = os.path.join('backend', 'crypto', 'system.key')
-            if os.path.exists(key_file):
-                with open(key_file, 'rb') as f:
-                    system_key = f.read()
-                
-                security_details.append({
-                    'operation': 'SYSTEM_KEY_INFO',
-                    'timestamp': datetime.datetime.now().strftime('%H:%M:%S'),
-                    'details': f'System Key Available: {len(system_key)} bytes | Base64: {base64.b64encode(system_key).decode()[:32]}...',
-                    'user': 'SYSTEM'
-                })
-            
-    except Exception as e:
-        security_details.append({
-            'operation': 'SECURITY_ERROR',
-            'timestamp': datetime.datetime.now().strftime('%H:%M:%S'),
-            'details': f'Error accessing PQC operations: {str(e)}',
-            'user': 'SYSTEM'
-        })
-    
-    # Get encryption statistics with key details
-    encrypted_users = fetch_all("SELECT email, encryption_method, app_password FROM user_credentials WHERE encryption_method = 'FERNET_AES'") or []
-    encryption_stats = {
-        'total_encrypted_credentials': len(encrypted_users),
-        'total_users': len(fetch_all("SELECT id FROM users") or []),
-        'total_emails': len(fetch_all("SELECT id FROM emails") or []),
-        'security_enabled': True if security_handler else False,
-        'encrypted_user_details': [{
-            'email': user['email'],
-            'encrypted_length': len(user['app_password']),
-            'preview': user['app_password'][:16] + '...' if user['app_password'] else 'None'
-        } for user in encrypted_users[:5]]  # Show first 5 users
-    }
-    
-    # Get stats for sidebar (required by base.html)
-    user_email = session.get('user_email') or session.get('email')
-    stats = get_cached_stats(user_email) if user_email else {
-        'total': 0,
-        'safe': 0,
-        'phishing': 0,
-        'pending': 0,
-        'starred': 0,
-        'unread': 0
-    }
-    
-    return render_template('admin_backend_monitor.html', 
-                         logs=system_logs, 
-                         security_operations=security_details,
-                         encryption_stats=encryption_stats,
-                         stats=stats,
-                         current_folder='admin_monitor',
-                         show_detailed_security=True)
 
-@app.route("/admin/backend_logs")
-@admin_required
-def admin_backend_logs():
-    """Real-time admin backend logs with detailed PQC information"""
-    try:
-        # Get recent PQC operations with detailed information
-        security_logs = fetch_all("""
-            SELECT action, user_email, details, timestamp
-            FROM logs 
-            WHERE action LIKE 'ENCRYPT_%" OR action LIKE "DECRYPT_%" OR action LIKE "KEY_%' 
-            ORDER BY timestamp DESC 
-            LIMIT 25
-        """) or []
-        
-        # Get other system logs
-        system_logs = fetch_all("""
-            SELECT l.action, l.user_email, l.details, l.timestamp, e.subject, e.sender, u.username
-            FROM logs l 
-            LEFT JOIN emails e ON l.email_id = e.id 
-            LEFT JOIN users u ON l.user_email = u.email
-            WHERE l.action NOT LIKE 'ENCRYPT_%" OR action LIKE "DECRYPT_%" OR action LIKE "KEY_%'
-            ORDER BY l.timestamp DESC 
-            LIMIT 10
-        """) or []
-        
-        # Format PQC logs with detailed information
-        formatted_logs = []
-        
-        # Add detailed PQC logs
-        for log in security_logs:
-            log_type = 'PQC_KEY' if 'KEY' in log['action'] else 'PQC_MESSAGE' if 'MESSAGE' in log['action'] else 'PQC_PROCESS'
-            formatted_logs.append({
-                'timestamp': log['timestamp'].strftime('%H:%M:%S') if log['timestamp'] else 'Unknown',
-                'action': log['action'],
-                'details': log.get('details', ''),
-                'type': log_type,
-                'user': log.get('user_email', 'Unknown')
-            })
-        
-        # Add system logs
-        for log in system_logs:
-            formatted_logs.append({
-                'timestamp': log['timestamp'].strftime('%H:%M:%S') if log['timestamp'] else 'Unknown',
-                'action': log['action'],
-                'details': log.get('details', '') or f"Email: {log.get('subject', 'N/A')[:30]}...",
-                'type': 'SYSTEM',
-                'user': log.get('username', log.get('user_email', 'Unknown'))
-            })
-        
-        # Sort all logs by timestamp
-        formatted_logs.sort(key=lambda x: x['timestamp'], reverse=True)
-        
-        return jsonify({
-            'logs': formatted_logs[:30],  # Show top 30 logs
-            'timestamp': datetime.datetime.now().strftime('%H:%M:%S'),
-            'pqc_status': 'ACTIVE' if security_handler else 'INACTIVE',
-            'pqc_details_count': len(security_logs)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)})
 
 @app.route("/pqc_calculations")
 @admin_required
@@ -1849,7 +1971,8 @@ def init_database():
                 ("encryption_method", "VARCHAR(50)"),
                 ("encrypted_content_key", "TEXT"),
                 ("threat_explanation", "TEXT"),
-                ("message_id", "VARCHAR(255) UNIQUE")
+                ("message_id", "VARCHAR(255) UNIQUE"),
+                ("feedback", "VARCHAR(20)") # New column for feedback
             ]
             
             for column_name, column_def in columns_to_add:
@@ -2007,7 +2130,7 @@ def test_database_connection():
 if __name__ == "__main__":
     print("Starting Email Security System with Real-time Monitoring...")
     print("Emails will be automatically fetched and analyzed in real-time!")
-    print("Access: http://localhost:5000")
+    print("Access: http://localhost:5001")
     print(f"Debug mode: {app.config['DEBUG']}")
     
     # Initialize database

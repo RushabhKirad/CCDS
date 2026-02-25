@@ -1,0 +1,29 @@
+# Homepage
+curl -X POST http://localhost:8080/api/v1/predict -H "Content-Type: application/json" -d "{\"path\":\"/\",\"method\":\"GET\"}"
+
+# About page
+curl -X POST http://localhost:8080/api/v1/predict -H "Content-Type: application/json" -d "{\"path\":\"/about\",\"method\":\"GET\"}"
+
+# Contact page
+curl -X POST http://localhost:8080/api/v1/predict -H "Content-Type: application/json" -d "{\"path\":\"/contact\",\"method\":\"GET\"}"
+
+# Static resources
+curl -X POST http://localhost:8080/api/v1/predict -H "Content-Type: application/json" -d "{\"path\":\"/images/logo.png\",\"method\":\"GET\"}"
+
+curl -X POST http://localhost:8080/api/v1/predict -H "Content-Type: application/json" -d "{\"path\":\"/css/style.css\",\"method\":\"GET\"}"
+
+
+# SQL Injection
+curl -X POST http://localhost:8080/api/v1/predict -H "Content-Type: application/json" -d "{\"path\":\"/login?id=1' OR '1'='1\",\"method\":\"GET\"}"
+
+# XSS Attack
+curl -X POST http://localhost:8080/api/v1/predict -H "Content-Type: application/json" -d "{\"path\":\"/search?q=<script>alert(1)</script>\",\"method\":\"GET\"}"
+
+# Directory Traversal
+curl -X POST http://localhost:8080/api/v1/predict -H "Content-Type: application/json" -d "{\"path\":\"/file.php?page=../../../etc/passwd\",\"method\":\"GET\"}"
+
+# Admin Access
+curl -X POST http://localhost:8080/api/v1/predict -H "Content-Type: application/json" -d "{\"path\":\"/admin/login\",\"method\":\"POST\"}"
+
+# WordPress Probe
+curl -X POST http://localhost:8080/api/v1/predict -H "Content-Type: application/json" -d "{\"path\":\"/wp-admin/\",\"method\":\"GET\"}"

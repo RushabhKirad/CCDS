@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anomaly Detection Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 20px; padding: 20px; margin-bottom: 30px; }
+        .header h1 { color: white; font-size: 2.5rem; margin-bottom: 10px; }
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 20px; padding: 30px; }
+        .predictor { grid-column: 1 / -1; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; color: white; margin-bottom: 5px; }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.3); border-radius: 5px; background: rgba(255,255,255,0.1); color: white; }
+        .predict-btn { background: #4CAF50; color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; }
+        .back-btn { position: fixed; top: 20px; left: 20px; background: rgba(255,255,255,0.1); color: white; padding: 12px 20px; border-radius: 10px; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <a href="../landing-page/index.html" class="back-btn">← Back</a>
+    
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Anomaly Detection System</h1>
+            <p>Real-time network traffic analysis</p>
+        </div>
+
+        <div class="dashboard">
+            <div class="card">
+                <h2>System Status</h2>
+                <div id="systemStatus">
+                    <p>Loading...</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Recent Alerts</h2>
+                <div id="alertsContainer">
+                    <p>No alerts yet.</p>
+                </div>
+            </div>
+
+            <div class="card predictor">
+                <h2>Anomaly Predictor</h2>
+                <form id="predictForm">
+                    <div class="form-group">
+                        <label>Source IP:</label>
+                        <input type="text" id="sourceIP" placeholder="192.168.1.100">
+                    </div>
+                    <div class="form-group">
+                        <label>Destination Port:</label>
+                        <input type="number" id="destPort" placeholder="80">
+                    </div>
+                    <div class="form-group">
+                        <label>Packet Size:</label>
+                        <input type="number" id="packetSize" placeholder="1024">
+                    </div>
+                    <button type="submit" class="predict-btn">Predict Anomaly</button>
+                </form>
+                <div id="predictionResult" style="margin-top: 20px; color: white;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadStatus() {
+            try {
+                const response = await fetch('http://localhost:8001/api/health');
+                const data = await response.json();
+                document.getElementById('systemStatus').innerHTML = `
+                    <p>Status: ${data.status}</p>
+                    <p>ML System: ${data.ml_system ? 'Active' : 'Inactive'}</p>
+                `;
+            } catch (error) {
+                document.getElementById('systemStatus').innerHTML = '<p>API not available</p>';
+            }
+        }
+
+        async function loadAlerts() {
+            try {
+                const response = await fetch('http://localhost:8001/api/alerts');
+                const data = await response.json();
+                const container = document.getElementById('alertsContainer');
+                
+                if (data.alerts && data.alerts.length > 0) {
+                    container.innerHTML = data.alerts.map(alert => `
+                        <div style="background: rgba(255,255,255,0.05); padding: 10px; margin: 5px 0; border-radius: 5px;">
+                            <h4>${alert.type}</h4>
+                            <p>Severity: ${alert.severity}</p>
+                            <small>${alert.timestamp}</small>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p>No alerts yet.</p>';
+                }
+            } catch (error) {
+                document.getElementById('alertsContainer').innerHTML = '<p>Could not load alerts</p>';
+            }
+        }
+
+        document.getElementById('predictForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const data = {
+                source_ip: document.getElementById('sourceIP').value,
+                dest_port: document.getElementById('destPort').value,
+                packet_size: document.getElementById('packetSize').value
+            };
+            
+            try {
+                const response = await fetch('http://localhost:8001/api/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                document.getElementById('predictionResult').innerHTML = `
+                    <h3>Prediction Result</h3>
+                    <p>Anomaly Score: ${result.anomaly_score}</p>
+                    <p>Is Anomaly: ${result.is_anomaly ? 'Yes' : 'No'}</p>
+                    <p>Confidence: ${(result.confidence * 100).toFixed(1)}%</p>
+                `;
+            } catch (error) {
+                document.getElementById('predictionResult').innerHTML = '<p>Prediction failed - API not available</p>';
+            }
+        });
+
+        loadStatus();
+        loadAlerts();
+    </script>
+</body>
+</html>

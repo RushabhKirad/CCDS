@@ -1,3 +1,0 @@
-name = "nitedu-anomaly-detection"
-main = "worker.js"
-compatibility_date = "2023-12-01"

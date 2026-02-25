@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Login - PQC vs Classical</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;500&display=swap"
+        rel="stylesheet">
+</head>
+
+<body class="login-page">
+    <div class="background-animation"></div>
+    <div class="login-container glass">
+        <div class="login-header">
+            <h1>QuantumShield</h1>
+            <p>Future-Proof Authentication Demonstration</p>
+        </div>
+        <form id="login-form">
+            <div class="input-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required placeholder="Enter username">
+            </div>
+            <div class="input-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="Enter password">
+            </div>
+            <button type="submit" id="login-btn">Secure Login</button>
+        </form>
+    </div>
+
+    <!-- Dashboard Overlay (hidden by default) -->
+    <div id="dashboard-overlay" class="hidden">
+        <div class="dashboard-content">
+            <header>
+                <h2>Security Pipeline Visualization</h2>
+                <button id="replay-btn" class="secondary-btn">Replay Authentication Flow</button>
+                <button id="close-btn" class="close-btn">&times;</button>
+            </header>
+
+            <div class="simulation-grid">
+                <!-- Classical Side -->
+                <div class="pipeline-section classical" id="classical-pipeline">
+                    <h3>Classical Secure Login</h3>
+                    <div class="algo-badge">ECDH + AES</div>
+                    <div class="flowchart-container" id="classical-flow">
+                        <svg id="classical-svg"></svg>
+                    </div>
+                </div>
+
+                <!-- PQC Side -->
+                <div class="pipeline-section pqc" id="pqc-pipeline">
+                    <h3>Post-Quantum Secure Login</h3>
+                    <div class="algo-badge">Kyber (Lattice-Based)</div>
+                    <div class="flowchart-container" id="pqc-flow">
+                        <svg id="pqc-svg"></svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="comparison-table-container glass">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th class="text-classical">Classical (ECDH)</th>
+                            <th class="text-pqc">Post-Quantum (Kyber)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="comparison-body">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Banner removed as per user request -->
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/visualizer.js') }}"></script>
+</body>
+
+</html>

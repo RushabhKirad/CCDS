@@ -32,7 +32,7 @@ function togglePassword(inputId) {
     const input = document.getElementById(inputId);
     const toggle = input.nextElementSibling;
     const icon = toggle.querySelector('i');
-    
+
     if (input.type === 'password') {
         input.type = 'text';
         icon.classList.remove('fa-eye');
@@ -47,14 +47,14 @@ function togglePassword(inputId) {
 // Password Strength Checker
 function checkPasswordStrength(password) {
     let score = 0;
-    
+
     if (password.length >= 8) score += 1;
     if (password.length >= 12) score += 1;
     if (/[a-z]/.test(password)) score += 1;
     if (/[A-Z]/.test(password)) score += 1;
     if (/[0-9]/.test(password)) score += 1;
     if (/[^A-Za-z0-9]/.test(password)) score += 1;
-    
+
     if (score < 3) {
         return { strength: 'weak', message: '🔴 Weak - Add uppercase, numbers, and symbols' };
     } else if (score < 4) {
@@ -74,17 +74,17 @@ const allowedEmailProviders = [
 
 function validateEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    
+
     if (!emailRegex.test(email)) {
         return { valid: false, message: 'Please enter a valid email address.' };
     }
-    
+
     const domain = email.split('@')[1].toLowerCase();
-    
+
     if (!allowedEmailProviders.includes(domain)) {
         return { valid: false, message: 'Please use a valid email provider (Gmail, Yahoo, Outlook, etc.).' };
     }
-    
+
     return { valid: true };
 }
 
@@ -110,7 +110,7 @@ function clearFormData(modalId) {
     const modal = document.getElementById(modalId);
     const inputs = modal.querySelectorAll('input');
     inputs.forEach(input => input.value = '');
-    
+
     // Clear password strength indicator
     const strengthDiv = document.getElementById('passwordStrength');
     if (strengthDiv) {
@@ -134,7 +134,7 @@ function showMessage(message, type, formId) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}`;
     messageDiv.textContent = message;
-    
+
     const form = document.getElementById(formId);
     form.insertBefore(messageDiv, form.firstChild);
 }
@@ -148,31 +148,31 @@ let currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
 // Login Form Handler
 async function handleLogin(e) {
     e.preventDefault();
-    
+
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
     const submitBtn = e.target.querySelector('.auth-submit-btn');
     const originalText = submitBtn.textContent;
-    
+
     // Add loading state
     submitBtn.textContent = 'Logging in...';
     submitBtn.disabled = true;
-    
+
     try {
-        const response = await fetch('http://localhost:4000/api/login', {
+        const response = await fetch('http://localhost:3000/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             currentUser = result.user;
             localStorage.setItem('currentUser', JSON.stringify(result.user));
             localStorage.setItem('authToken', result.token);
             showMessage('Login successful! Welcome back.', 'success', 'loginForm');
-            
+
             setTimeout(() => {
                 closeModal('loginModal');
                 updateAuthUI();
@@ -192,54 +192,54 @@ async function handleLogin(e) {
 // Signup Form Handler
 async function handleSignup(e) {
     e.preventDefault();
-    
+
     const name = document.getElementById('signupName').value;
     const email = document.getElementById('signupEmail').value;
     const password = document.getElementById('signupPassword').value;
     const confirmPassword = document.getElementById('signupConfirmPassword').value;
     const submitBtn = e.target.querySelector('.auth-submit-btn');
     const originalText = submitBtn.textContent;
-    
+
     // Email validation
     const emailValidation = validateEmail(email);
     if (!emailValidation.valid) {
         showMessage(emailValidation.message, 'error', 'signupForm');
         return;
     }
-    
+
     // Password validation
     if (password !== confirmPassword) {
         showMessage('Passwords do not match.', 'error', 'signupForm');
         return;
     }
-    
+
     const passwordCheck = checkPasswordStrength(password);
     if (passwordCheck.strength === 'weak') {
         showMessage('Password is too weak. Please create a stronger password.', 'error', 'signupForm');
         return;
     }
-    
+
     if (password.length < 6) {
         showMessage('Password must be at least 6 characters.', 'error', 'signupForm');
         return;
     }
-    
+
     // Add loading state
     submitBtn.textContent = 'Creating Account...';
     submitBtn.disabled = true;
-    
+
     try {
-        const response = await fetch('http://localhost:4000/api/register', {
+        const response = await fetch('http://localhost:3000/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, email, password })
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             showMessage('Account created successfully! You can now login.', 'success', 'signupForm');
-            
+
             setTimeout(() => {
                 closeModal('signupModal');
                 openLoginModal();
@@ -259,10 +259,10 @@ async function handleSignup(e) {
 
 
 // Real-time password strength checking
-document.getElementById('signupPassword').addEventListener('input', function() {
+document.getElementById('signupPassword').addEventListener('input', function () {
     const password = this.value;
     const strengthDiv = document.getElementById('passwordStrength');
-    
+
     if (password.length > 0) {
         const result = checkPasswordStrength(password);
         strengthDiv.className = `password-strength ${result.strength}`;
@@ -276,7 +276,7 @@ document.getElementById('signupPassword').addEventListener('input', function() {
 // Update Auth UI
 function updateAuthUI() {
     const authButtons = document.querySelector('.auth-buttons');
-    
+
     if (currentUser) {
         const firstName = currentUser.name.split(' ')[0];
         authButtons.innerHTML = `
@@ -315,9 +315,9 @@ function showNotification(message) {
         z-index: 4000;
         animation: slideIn 0.3s ease;
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
         notification.style.animation = 'slideOut 0.3s ease';
         setTimeout(() => notification.remove(), 300);
@@ -326,7 +326,7 @@ function showNotification(message) {
 
 // Close modals on outside click
 document.querySelectorAll('.modal').forEach(modal => {
-    modal.addEventListener('click', function(e) {
+    modal.addEventListener('click', function (e) {
         if (e.target === this) {
             closeModal(this.id);
         }
@@ -340,28 +340,28 @@ function loadModule(moduleName) {
         openLoginModal();
         return;
     }
-    
+
     let moduleUrl = '';
     let moduleName_display = '';
-    
-    switch(moduleName) {
+
+    switch (moduleName) {
         case 'anomaly':
             moduleUrl = 'http://localhost:8001';
-            moduleName_display = 'Anomaly Detection System (Port 8001)';
+            moduleName_display = 'Anomaly Detection System ';
             break;
         case 'phishing':
             moduleUrl = 'http://localhost:5001';
-            moduleName_display = 'Phishing Detection System (Port 5001)';
+            moduleName_display = 'Phishing Detection System';
             break;
         case 'insider':
-            moduleUrl = 'http://localhost:5002';
-            moduleName_display = 'Insider Threat Detection (Port 5002)';
+            moduleUrl = 'http://localhost:5000';
+            moduleName_display = 'Insider Threat Detection System';
             break;
         default:
             showNotification('Module not found!');
             return;
     }
-    
+
     showNotification(`Opening ${moduleName_display}...`);
     window.open(moduleUrl, '_blank');
 }
@@ -376,7 +376,7 @@ function createSparkle() {
     sparkle.style.left = Math.random() * 100 + '%';
     sparkle.style.animationDelay = Math.random() * 3 + 's';
     document.querySelector('.sparkles').appendChild(sparkle);
-    
+
     setTimeout(() => {
         sparkle.remove();
     }, 2500);

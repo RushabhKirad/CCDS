@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insider Threat Detection Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 20px; padding: 20px; margin-bottom: 30px; }
+        .header h1 { color: white; font-size: 2.5rem; margin-bottom: 10px; }
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 20px; padding: 30px; }
+        .alerts { grid-column: 1 / -1; }
+        .alert-item { background: rgba(255,255,255,0.05); border-radius: 10px; padding: 15px; margin-bottom: 10px; }
+        .back-btn { position: fixed; top: 20px; left: 20px; background: rgba(255,255,255,0.1); color: white; padding: 12px 20px; border-radius: 10px; text-decoration: none; }
+        .test-btn { background: #ff6b6b; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+    </style>
+</head>
+<body>
+    <a href="../landing-page/index.html" class="back-btn">← Back</a>
+    
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ Insider Threat Detection</h1>
+            <p>Behavioral analysis and threat monitoring</p>
+        </div>
+
+        <div class="dashboard">
+            <div class="card">
+                <h2>System Status</h2>
+                <div id="systemStatus">
+                    <p>Loading...</p>
+                </div>
+                <button class="test-btn" onclick="testUSB()">Test USB Alert</button>
+            </div>
+
+            <div class="card">
+                <h2>Quick Stats</h2>
+                <div id="stats">
+                    <p>Total Alerts: <span id="totalAlerts">0</span></p>
+                    <p>Active Monitoring: <span id="monitoring">Yes</span></p>
+                </div>
+            </div>
+
+            <div class="card alerts">
+                <h2>Recent Alerts</h2>
+                <div id="alertsContainer">
+                    <p>No alerts yet.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadStatus() {
+            try {
+                const response = await fetch('http://localhost:5002/api/health');
+                const data = await response.json();
+                document.getElementById('systemStatus').innerHTML = `
+                    <p>Status: ${data.status}</p>
+                    <p>Database: ${data.database ? 'Connected' : 'Disconnected'}</p>
+                    <p>Threat Detector: ${data.threat_detector ? 'Active' : 'Inactive'}</p>
+                `;
+            } catch (error) {
+                document.getElementById('systemStatus').innerHTML = '<p>API not available</p>';
+            }
+        }
+
+        async function loadAlerts() {
+            try {
+                const response = await fetch('http://localhost:5002/api/alerts');
+                const data = await response.json();
+                const container = document.getElementById('alertsContainer');
+                
+                if (data.alerts && data.alerts.length > 0) {
+                    container.innerHTML = data.alerts.map(alert => `
+                        <div class="alert-item">
+                            <h4>${alert.alert_type || 'Security Alert'}</h4>
+                            <p>${alert.description || 'Threat detected'}</p>
+                            <small>${alert.created_at || new Date().toLocaleString()}</small>
+                        </div>
+                    `).join('');
+                    document.getElementById('totalAlerts').textContent = data.alerts.length;
+                } else {
+                    container.innerHTML = '<p>No alerts yet.</p>';
+                }
+            } catch (error) {
+                document.getElementById('alertsContainer').innerHTML = '<p>Could not load alerts</p>';
+            }
+        }
+
+        async function testUSB() {
+            try {
+                const response = await fetch('http://localhost:5002/api/test_alert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                alert(data.message || 'Test completed');
+                loadAlerts();
+            } catch (error) {
+                alert('Test failed - API not available');
+            }
+        }
+
+        loadStatus();
+        loadAlerts();
+        setInterval(loadAlerts, 5000);
+    </script>
+</body>
+</html>

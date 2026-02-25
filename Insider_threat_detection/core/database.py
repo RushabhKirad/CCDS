@@ -8,30 +8,80 @@ import logging
 class DatabaseManager:
     def __init__(self):
         self.connection = None
+        self.pool = None
         self.connect()
     
     def connect(self):
         try:
-            self.connection = mysql.connector.connect(**DB_CONFIG)
+            from mysql.connector import pooling
+            # Create pool config without duplicate pool_size
+            pool_config = DB_CONFIG.copy()
+            pool_config.pop('pool_size', None)
+            pool_config.pop('pool_reset_session', None)
+            
+            self.pool = pooling.MySQLConnectionPool(
+                pool_name="insider_threat_pool",
+                pool_size=5,
+                **pool_config
+            )
+            self.connection = self.pool.get_connection()
             if self.connection.is_connected():
-                logging.info("Connected to MySQL database")
+                logging.info("Connected to MySQL database with pooling")
         except Error as e:
             logging.error(f"Database connection error: {e}")
+            # Fallback to direct connection
+            try:
+                direct_config = DB_CONFIG.copy()
+                direct_config.pop('pool_size', None)
+                direct_config.pop('pool_reset_session', None)
+                self.connection = mysql.connector.connect(**direct_config)
+                if self.connection.is_connected():
+                    logging.info("Connected to MySQL database (direct)")
+            except Error as e2:
+                logging.error(f"Direct connection also failed: {e2}")
     
     def execute_query(self, query, params=None):
+        cursor = None
+        connection = None
         try:
-            cursor = self.connection.cursor(dictionary=True)
+            # Get fresh connection from pool
+            if self.pool:
+                try:
+                    connection = self.pool.get_connection()
+                except:
+                    self.connect()
+                    connection = self.pool.get_connection() if self.pool else self.connection
+            else:
+                connection = self.connection
+                if not connection or not connection.is_connected():
+                    self.connect()
+                    connection = self.connection
+            
+            if not connection or not connection.is_connected():
+                logging.error("No database connection available")
+                return None
+                
+            cursor = connection.cursor(dictionary=True)
             cursor.execute(query, params)
             if query.strip().upper().startswith('SELECT'):
-                return cursor.fetchall()
+                result = cursor.fetchall()
+                return result
             else:
-                self.connection.commit()
+                connection.commit()
                 return cursor.lastrowid
         except Error as e:
             logging.error(f"Query execution error: {e}")
+            if "Lost connection" in str(e) or "MySQL server has gone away" in str(e) or "SSL" in str(e):
+                try:
+                    self.connect()
+                except:
+                    pass
             return None
         finally:
-            cursor.close()
+            if cursor:
+                cursor.close()
+            if connection and self.pool and connection != self.connection:
+                connection.close()
     
     def get_user_by_username(self, username):
         query = """
@@ -64,6 +114,18 @@ class DatabaseManager:
         return self.execute_query(query, params)
     
     def create_alert(self, user_id, alert_type, severity, title, description, metadata=None):
+        # Check for duplicate alerts in last 30 seconds
+        check_query = """
+        SELECT id FROM alerts 
+        WHERE user_id = %s AND alert_type = %s AND title = %s 
+        AND created_at > DATE_SUB(NOW(), INTERVAL 30 SECOND)
+        LIMIT 1
+        """
+        existing = self.execute_query(check_query, (user_id, alert_type, title))
+        
+        if existing:
+            return existing[0]['id']  # Return existing alert ID
+        
         query = """
         INSERT INTO alerts (user_id, alert_type, severity, title, description, metadata)
         VALUES (%s, %s, %s, %s, %s, %s)
