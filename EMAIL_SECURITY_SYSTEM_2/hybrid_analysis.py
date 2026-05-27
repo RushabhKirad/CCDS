@@ -5,6 +5,7 @@ from backend.analyzers.vision_analyzer import VisionAnalyzer
 from backend.analyzers.url_deep_analyzer import URLDeepAnalyzer
 from backend.analyzers.attachment_analyzer import extract_features
 from backend.analyzers.auth_header_analyzer import AuthHeaderAnalyzer
+from backend.analyzers.advanced_phishing_detector import get_advanced_phishing_score
 # from backend.analyzers.bert_analyzer import BertAnalyzer # Commented out to prevent slow load on dev
 
 # Initialize analyzers
@@ -111,8 +112,33 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
         url_rule_score = 0
         url_final_score = 0
         url_ml_available = False
-        
+        # BUG FIX #1 & #5: Initialize deep_risks and deep_url_score BEFORE the if-urls block
+        # so they are always defined even when no HTTP URLs are present.
+        deep_risks = []
+        deep_url_score = 0
+
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text_content)
+
+        # BUG FIX #3 & #4: Score the SENDER domain TLD and also extract domains
+        # from email addresses embedded in the body (e.g. claim@lottery.ml).
+        suspicious_tlds = ('.tk', '.ml', '.ga', '.cf', '.xyz', '.top', '.pw', '.click', '.gq')
+
+        # Check sender domain
+        sender_domain_part = sender.split('@')[-1] if '@' in sender else sender
+        if any(sender_domain_part.endswith(tld) for tld in suspicious_tlds):
+            url_rule_score = min(1.0, url_rule_score + 0.50)
+            deep_risks.append(f"Suspicious sender TLD: .{sender_domain_part.split('.')[-1]}")
+            print(f"Sender TLD risk: {sender_domain_part}")
+
+        # Extract bare domains from email addresses in body (e.g. reply@lottery.ml)
+        body_email_domains = re.findall(
+            r'[a-zA-Z0-9._%+\-]+@([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})', text_content
+        )
+        for domain in body_email_domains:
+            if any(domain.endswith(tld) for tld in suspicious_tlds):
+                url_rule_score = min(1.0, url_rule_score + 0.35)
+                deep_risks.append(f"Suspicious email domain in body: {domain}")
+                print(f"Body email domain risk: {domain}")
         
         if urls:
             # 2a. URL ML Analysis
@@ -150,8 +176,7 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
             print(f"URL Rule Score: {url_rule_score:.3f}")
             
             # 2c. Deep URL Analysis (New) - wrapped in try-except
-            deep_url_score = 0
-            deep_risks = []
+            # (deep_url_score and deep_risks already initialized above)
             try:
                 for url in urls[:3]: # Analyze top 3 URLs to save time
                     deep_analysis = url_deep_analyzer.analyze_url(url)
@@ -230,51 +255,111 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
             # 3c. Combine Attachment Scores (ML 80% + Rules 20%)
             attachment_final_score = (attachment_ml_score * 0.8) + (attachment_rule_score * 0.2)
             print(f"Attachment Combined: {attachment_final_score:.3f}")
+
+        # STEP 1.5: ADVANCED PHISHING DETECTION
+        # Catches what Google misses: display-name spoofing, lookalike domains,
+        # homoglyphs, BEC fraud, callback phishing, Reply-To mismatch, legit-service abuse
+        adv_result = {'score': 0.0, 'signals': [], 'override_phishing': False}
+        try:
+            # Pull reply_to from email headers if stored
+            reply_to = ''
+            if email_data:
+                reply_to = (email_data.get('reply_to') or '').lower()
+
+            adv_result = get_advanced_phishing_score(
+                sender=sender,
+                subject=subject,
+                body=email_text,
+                reply_to=reply_to,
+                urls=urls,
+                domain_age_days=-1,  # Will be filled by url_deep_analyzer when available
+            )
+            if adv_result['score'] > 0:
+                print(f"Advanced Phishing Score: {adv_result['score']:.3f}")
+                for sig in adv_result['signals']:
+                    print(f"  [ADV SIGNAL] {sig}")
+        except Exception as adv_err:
+            print(f"Advanced phishing check error: {adv_err}")
+
+        adv_score    = adv_result['score']
+        adv_signals  = adv_result['signals']
+        adv_override = adv_result['override_phishing']
         
         # STEP 4: ENSEMBLE SCORING WITH ADAPTIVE WEIGHTS
-        text_weight = 0.5
-        url_weight = 0.3 if urls else 0
-        attachment_weight = 0.2 if attachment_path else 0
-        
-        # Redistribute weights if components are missing
+        # Weights: Text 50%, URL 25%, Advanced 20%, Attachment 5%
+        # (Advanced layer added to catch Google-bypassing phishing)
+        text_weight       = 0.50
+        url_weight        = 0.25 if urls else 0
+        adv_weight        = 0.20
+        attachment_weight = 0.05 if attachment_path else 0
+
+        # Redistribute when components are missing
         if not urls and not attachment_path:
-            text_weight = 1.0
+            text_weight = 0.80
+            adv_weight  = 0.20
         elif not urls:
-            text_weight = 0.8
-            attachment_weight = 0.2
+            text_weight       = 0.70
+            adv_weight        = 0.20
+            attachment_weight = 0.10
         elif not attachment_path:
-            text_weight = 0.7
-            url_weight = 0.3
-        
+            text_weight = 0.55
+            url_weight  = 0.25
+            adv_weight  = 0.20
+
         # Calculate ensemble score
-        ensemble_score = (text_final_score * text_weight + 
-                         url_final_score * url_weight + 
-                         attachment_final_score * attachment_weight)
-        
+        ensemble_score = (
+            text_final_score       * text_weight +
+            url_final_score        * url_weight +
+            adv_score              * adv_weight +
+            attachment_final_score * attachment_weight
+        )
+
         # Apply Auth Penalty
         ensemble_score += auth_score_penalty
         ensemble_score = min(1.0, ensemble_score)
-        
-        print(f"Ensemble Score: {ensemble_score:.3f} (T:{text_weight}, U:{url_weight}, A:{attachment_weight})")
+
+        print(f"Ensemble Score: {ensemble_score:.3f} (T:{text_weight}, U:{url_weight}, ADV:{adv_weight}, A:{attachment_weight})")
+
+        # ADVANCED OVERRIDE: If a single advanced signal is very high-confidence,
+        # classify as phishing regardless of the ML ensemble.
+        # (Catches spear phishing, BEC, homoglyph attacks that ML models may under-score)
+        if adv_override and ensemble_score < 0.35:
+            print(f"Advanced override: high-confidence signal forces PHISHING classification")
+            ensemble_score = 0.75
         
         # STEP 5: TRUST AND SAFETY ADJUSTMENTS
         trusted_domains = ['gmail.com', 'google.com', 'microsoft.com', 'github.com', 'naukri.com', 'naukrigulf.com', 'infoedge.com']
         trusted_contacts = ['samyakbhongade2019@gmail.com', 'rushabhkirad@gmail.com']
-        
-        is_trusted = any(domain in sender for domain in trusted_domains) or any(contact in sender for contact in trusted_contacts)
-        
+
+        # BUG FIX #6: Use exact domain match (sender ends with @trusted_domain)
+        # Prevents spoofed domains like paypal-gmail.tk from getting a trust boost.
+        is_trusted = (
+            any(sender.endswith('@' + domain) or sender == domain for domain in trusted_domains)
+            or any(contact in sender for contact in trusted_contacts)
+        )
+
         safe_patterns = ['unsubscribe', 'newsletter', 'notification', 'receipt', 'invoice']
         has_safe_indicators = any(pattern in text_content for pattern in safe_patterns)
-        
-        # Apply trust adjustments
-        if is_trusted and len(text_content.strip()) < 100:
+
+        # Apply trust adjustments — only reduce if NOT already high-confidence phishing
+        if is_trusted and len(text_content.strip()) < 100 and ensemble_score < 0.60:
             ensemble_score *= 0.3
             print(f"Trusted sender adjustment: {ensemble_score:.3f}")
-        
-        if has_safe_indicators:
+
+        # Safe-content indicators only reduce if score is borderline (not clearly phishing)
+        if has_safe_indicators and ensemble_score < 0.50:
             ensemble_score *= 0.6
             print(f"Safe content adjustment: {ensemble_score:.3f}")
-        
+
+        # FALSE-POSITIVE GUARD: If the score is in a borderline range (0.35–0.68)
+        # AND there are no rule-based threat indicators at all, don't flag as phishing.
+        # High-confidence ML scores (>=0.68) always pass regardless.
+        # This prevents the text ML model from over-scoring innocent short emails.
+        has_rule_threats = (text_rule_score > 0.05 or url_rule_score > 0.05 or bool(deep_risks))
+        if 0.35 <= ensemble_score < 0.68 and not has_rule_threats:
+            print(f"False-positive guard: no rule signals at score {ensemble_score:.3f} — treating as safe")
+            ensemble_score = 0.30  # push below threshold
+
         # STEP 6: FINAL CLASSIFICATION WITH ADJUSTED THRESHOLDS
         # Lowered threshold to 0.35 for better phishing detection when ML is unavailable
         if ensemble_score >= 0.35:
@@ -331,7 +416,11 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
             urgency_words = re.findall(r'(urgent|immediately|act now|expires|suspended)', text_content)
             if urgency_words:
                 threats.append(f"Urgency tactics: {', '.join(set(urgency_words))}")
-            
+
+            # Advanced detection signals (display spoofing, BEC, lookalike, etc.)
+            if adv_signals:
+                threats.append(f"Advanced Detection: {'; '.join(adv_signals[:3])}")
+
             threat_explanation = " | ".join(threats) if threats else "Multiple risk indicators detected"
         
         # STEP 9: UPDATE DATABASE AND LOG
@@ -348,7 +437,11 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
         return label, confidence
         
     except Exception as e:
+        # BUG FIX #2: Fail-safe toward PHISHING, not safe.
+        # A crash in the pipeline must NEVER silently pass a phishing email.
+        import traceback
         print(f"Hybrid analysis error: {e}")
-        execute_query("UPDATE emails SET label = %s, confidence_score = %s WHERE id = %s", 
-                     ('safe', 0.75, email_id))
-        return 'safe', 0.75
+        traceback.print_exc()
+        execute_query("UPDATE emails SET label = %s, confidence_score = %s, threat_explanation = %s WHERE id = %s",
+                     ('phishing', 0.60, f'Analysis error — flagged for safety: {str(e)[:200]}', email_id))
+        return 'phishing', 0.60

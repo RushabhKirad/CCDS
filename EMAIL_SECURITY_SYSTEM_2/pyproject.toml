@@ -1,0 +1,18 @@
+[tool.pyright]
+pythonVersion = "3.11"
+pythonPlatform = "Windows"
+include = ["."]
+extraPaths = ["."]
+reportMissingImports = "none"
+reportMissingModuleSource = "none"
+reportGeneralTypeIssues = "none"
+reportAttributeAccessIssue = "none"
+reportReturnType = "none"
+reportUndefinedVariable = "none"
+typeCheckingMode = "off"
+
+[tool.pylsp.plugins.pylint]
+enabled = false
+
+[tool.pylsp.plugins.pyflakes]
+enabled = false

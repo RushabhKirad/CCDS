@@ -1,0 +1,106 @@
+C:\Users\rusha\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\sklearn\base.py:347: InconsistentVersionWarning: Trying to unpickle estimator DecisionTreeClassifier from version 1.7.0 when using version 1.3.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+C:\Users\rusha\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\sklearn\base.py:347: InconsistentVersionWarning: Trying to unpickle estimator RandomForestClassifier from version 1.7.0 when using version 1.3.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+C:\Users\rusha\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\sklearn\base.py:347: InconsistentVersionWarning: Trying to unpickle estimator DecisionTreeClassifier from version 1.7.0 when using version 1.3.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+C:\Users\rusha\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\sklearn\base.py:347: InconsistentVersionWarning: Trying to unpickle estimator RandomForestClassifier from version 1.7.0 when using version 1.3.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+INFO:mysql.connector:package: mysql.connector.plugins
+INFO:mysql.connector:plugin_name: caching_sha2_password
+INFO:mysql.connector:AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+======================================================================
+EMAIL SECURITY SYSTEM - ML MODEL DIAGNOSTICS
+======================================================================
+
+[STEP 1] CHECKING MODEL FILES
+--------------------------------------------------
+  [OK] text_phishing_model.pkl (10,459,321 bytes) - Text Phishing Classifier
+  [OK] vectorizer.pkl (123,488,423 bytes) - Text TF-IDF Vectorizer
+  [OK] url_model.pkl (7,843,833 bytes) - URL Phishing Classifier
+  [OK] url_vectorizer.pkl (532,396 bytes) - URL TF-IDF Vectorizer
+  [OK] attachment_model.pkl (1,175,673 bytes) - Attachment Risk Classifier
+
+[STEP 2] LOADING MODELS
+--------------------------------------------------
+  [OK] Text Model: RandomForestClassifier
+  [OK] Text Vectorizer: TfidfVectorizer
+       Vocabulary size: 5000 words
+       IDF vector: 5000 values
+  [OK] URL Model: RandomForestClassifier
+  [OK] URL Vectorizer: TfidfVectorizer
+       Vocabulary size: 3000 tokens
+  [OK] Attachment Model: RandomForestClassifier
+
+[STEP 3] TESTING PREDICTIONS
+--------------------------------------------------
+
+  Testing Text Classifier:
+    [X] Sample 1: Predicted=1        Expected=PHISHING Conf=0.78
+        Text: Your account has been suspended. Click here to ver...
+    [X] Sample 2: Predicted=1        Expected=SAFE     Conf=0.70
+        Text: Hi there! Just wanted to check how you are doing. ...
+    [X] Sample 3: Predicted=1        Expected=PHISHING Conf=0.72
+        Text: URGENT: Your bank account will be closed. Enter yo...
+    [X] Sample 4: Predicted=1        Expected=SAFE     Conf=0.62
+        Text: Here are the meeting notes from yesterday. Let me ...
+
+  Testing URL Classifier:
+    [X] Sample 1: Predicted=1        URL=http://paypal-verify.tk/login
+    [X] Sample 2: Predicted=1        URL=https://www.google.com
+    [X] Sample 3: Predicted=1        URL=http://192.168.1.1/admin/verify
+    [X] Sample 4: Predicted=1        URL=https://github.com/user/repo
+
+[STEP 4] CHECKING HYBRID ANALYSIS INTEGRATION
+--------------------------------------------------
+  [OK] hybrid_analyze_email function imported
+  [OK] ModelLoader works correctly
+       text_model: RandomForestClassifier
+       text_vect: TfidfVectorizer
+       url_model: RandomForestClassifier
+       url_vect: TfidfVectorizer
+       attachment_model: RandomForestClassifier
+
+[STEP 5] FULL HYBRID ANALYSIS TEST
+--------------------------------------------------
+Connected to MySQL database successfully
+Connected to MySQL database successfully
+  Created test email with ID: 135
+  Running hybrid analysis...
+Connected to MySQL database successfully
+Text ML Score: 0.737
+Text Rule Score: 0.800
+Text Combined: 0.762
+URL ML Score: 0.832
+URL Rule Score: 0.350
+Error trying to connect to socket: closing socket - timed out
+Deep URL Risks: SSL Issue: [Errno 11001] getaddrinfo failed
+URL Combined: 0.626
+Ensemble Score: 0.721 (T:0.7, U:0.3, A:0)
+Connected to MySQL database successfully
+Connected to MySQL database successfully
+Email 135: PHISHING (0.88) - Ensemble: 0.721
+  Threats: ML Model: High phishing probability (0.74) | Threat patterns: ('verify', 'account'), ('click here', 'urgent'), ('suspended', 'account'), ssn | Suspicious URLs: http://verify-account.tk/login | Deep URL Analysis: SSL Issue: [Errno 11001] getaddrinfo failed | Urgency tactics: suspended, urgent
+
+  RESULT: PHISHING (Confidence: 88.0%)
+  Expected: PHISHING
+  [OK] Phishing correctly detected!
+Connected to MySQL database successfully
+  Cleaned up test email
+
+======================================================================
+DIAGNOSTIC SUMMARY
+======================================================================
+
+If predictions are failing, possible issues:
+1. Vectorizer not fitted (idf_ missing) - RETRAIN REQUIRED
+2. Model/Vectorizer mismatch - they were trained separately  
+3. Wrong prediction labels (numeric vs string)
+4. Threshold too high in hybrid_analysis.py (currently 0.6)
+
+To fix: Run the training scripts in backend/analyzers/
+

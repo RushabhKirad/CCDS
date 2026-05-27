@@ -1,8 +1,12 @@
 # backend/ingestion/mta_listener.py
+import sys
+import os
+# Ensure project root is on sys.path so 'backend.*' imports work when run standalone
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import imaplib
 import email as email_module
 from email.header import decode_header
-import os
 import datetime
 from backend.ingestion.save_to_db import store_email
 
@@ -18,8 +22,10 @@ def get_user_email_config(user_email=None, user_password=None):
     # No default configuration - require explicit credentials
     return None
 
-ATTACHMENT_DIR = os.path.join(os.getcwd(), "attachments")
+ATTACHMENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'attachments')
+ATTACHMENT_DIR = os.path.abspath(ATTACHMENT_DIR)
 os.makedirs(ATTACHMENT_DIR, exist_ok=True)
+print(f"Attachment storage directory: {ATTACHMENT_DIR}")
 
 def clean_text(text):
     """Remove unwanted characters for filenames"""
@@ -228,14 +234,23 @@ def fetch_emails(user_email=None, user_password=None):
                         print(f"NEW EMAIL {new_emails_count}: [Subject with special characters]... (Date: {email_date})")
                     
                     # Auto-analyze the email
+                    # FIX: import directly from hybrid_analysis instead of
+                    # from app (circular import — app imports mta_listener,
+                    # mta_listener imported app → ImportError at startup).
                     try:
-                        from app import analyze_email_content
-                        analyze_email_content(email_id, body or '', subject or 'No Subject')
+                        from hybrid_analysis import hybrid_analyze_email
+                        from backend.analyzers.model_loader import ModelLoader
+                        _loader = ModelLoader()
+                        hybrid_analyze_email(email_id, body or '', subject or 'No Subject', _loader)
                         
                         # Log email processing
                         from backend.db.db_utils import execute_query
-                        execute_query("INSERT INTO logs (email_id, action, timestamp, user_email, details) VALUES (%s, %s, NOW(), %s, %s)", 
-                                     (email_id, 'email_processed', config['email'], f'Subject: {(subject or "No Subject")[:30]}...'))
+                        execute_query(
+                            "INSERT INTO logs (email_id, action, timestamp, user_email, details) "
+                            "VALUES (%s, %s, NOW(), %s, %s)",
+                            (email_id, 'email_processed', config['email'],
+                             f'Subject: {(subject or "No Subject")[:30]}...')
+                        )
                         
                     except Exception as e:
                         print(f"Auto-analysis error: {e}")

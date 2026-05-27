@@ -17,7 +17,7 @@ start "PQC Service" cmd /k "cd /d backend\pqc-service && python pqc_service.py"
 timeout /t 2 /nobreak >nul
 
 echo [4/6] Starting Email Security / Phishing Detection (Port 5000)...
-start "Email Security" cmd /k "cd /d EMAIL_SECURITY_SYSTEM_2 && python run.py"
+start "Email Security" cmd /k "cd /d EMAIL_SECURITY_SYSTEM_2 && python app.py"
 timeout /t 3 /nobreak >nul
 
 echo [5/6] Starting Insider Threat Detection (Port 5050)...

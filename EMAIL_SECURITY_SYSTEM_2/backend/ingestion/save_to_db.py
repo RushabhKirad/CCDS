@@ -1,4 +1,9 @@
 # backend/ingestion/save_to_db.py
+import sys
+import os
+# Ensure project root is on sys.path so 'backend.*' imports work when run standalone
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 from backend.db.db_utils import execute_query
 
 def store_email(email_data, attachment_path=None):
@@ -36,6 +41,8 @@ def store_email(email_data, attachment_path=None):
     
     # Store emails in plain text for now to avoid decryption issues
     print(f"Storing email in plain text for {user_email}")
+    if attachment_path:
+        print(f"  → attachment_path will be saved: {attachment_path}")
 
     # Get email date if provided
     email_date = email_data.get("email_date")

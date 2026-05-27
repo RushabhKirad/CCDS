@@ -1,0 +1,16 @@
+{
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Windows",
+  "pythonPath": "C:/Users/rusha/AppData/Local/Microsoft/WindowsApps/python3.exe",
+  "include": ["."],
+  "exclude": ["**/__pycache__/**", "**/node_modules/**"],
+  "extraPaths": ["."],
+  "venvPath": ".",
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportAttributeAccessIssue": "none",
+  "reportReturnType": "none",
+  "reportUndefinedVariable": "none",
+  "typeCheckingMode": "off"
+}

@@ -1,11 +1,15 @@
 # backend/ingestion/email_parser.py
+import sys
+import os
+# Ensure project root is on sys.path so 'backend.*' imports work when run standalone
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import email
 from email.header import decode_header
-import os
 from backend.ingestion.save_to_db import store_email
 from backend.analyzers.file_utils import extract_attachment_features
 
-ATTACHMENT_DIR = os.path.join(os.getcwd(), "attachments")
+ATTACHMENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'attachments'))
 os.makedirs(ATTACHMENT_DIR, exist_ok=True)
 
 def clean_text(text):

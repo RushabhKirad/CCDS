@@ -22,7 +22,7 @@
   "false_positives": 696,
   "false_negatives": 723,
   "training_samples": 112401,
-  "computed_at": "2026-01-28T17:04:22.980657",
+  "computed_at": "2026-03-22T10:08:47.358260",
   "model_type": "MultinomialNB",
   "vectorizer_type": "TfidfVectorizer",
   "note": "All metrics computed from real model predictions on held-out test set"

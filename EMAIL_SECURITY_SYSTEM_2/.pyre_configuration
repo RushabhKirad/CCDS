@@ -1,0 +1,7 @@
+{
+  "source_directories": ["."],
+  "search_path": ["."],
+  "strict": false,
+  "ignore": [],
+  "exclude": ["**/__pycache__/**", "**/*.pyc"]
+}

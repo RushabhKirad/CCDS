@@ -1,13 +1,13 @@
 from flask import Flask, render_template, request, redirect, url_for, send_file, abort, jsonify, flash, session
 from backend.db.db_utils import execute_query, fetch_one, fetch_all
 from backend.crypto.pqc_handler import security_handler
+from backend.db.db_setup import init_database, create_users_table
+from backend.auth.auth_utils import hash_password, authenticate_user
 from config import config
 import os
 import datetime
-import hashlib
 import logging
 from logging.handlers import RotatingFileHandler
-from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 
 # Async Executor
@@ -139,21 +139,43 @@ def api_analyze():
         return response
     
     try:
-        data = request.get_json()
-        subject = data.get('subject', 'No Subject')
-        body = data.get('body', '')
-        sender = data.get('sender', 'unknown@example.com')
+        # Support both JSON and multipart/form-data (for attachments)
+        if request.is_json:
+            data = request.get_json()
+            subject = data.get('subject', 'No Subject')
+            body = data.get('body', '')
+            sender = data.get('sender', 'unknown@example.com')
+            attachment_path = None
+        else:
+            subject = request.form.get('subject', 'No Subject')
+            body = request.form.get('body', '')
+            sender = request.form.get('sender', 'unknown@example.com')
+            attachment_path = None
+            attachment = request.files.get('attachment')
+            if attachment and attachment.filename:
+                from werkzeug.utils import secure_filename
+                att_dir = os.path.join(os.getcwd(), 'attachments')
+                os.makedirs(att_dir, exist_ok=True)
+                att_filename = secure_filename(attachment.filename)
+                filepath = os.path.join(att_dir, att_filename)
+                attachment.save(filepath)
+                attachment_path = filepath
         
         print(f"API: Analyzing email from {sender}")
         
-        # Save to temp for analysis
-        insert_query = "INSERT INTO emails (sender, subject, body, user_email) VALUES (%s, %s, %s, %s)"
-        execute_query(insert_query, (sender, subject, body, 'api_user'))
+        # Save using store_email so attachment_path is persisted
+        from backend.ingestion.save_to_db import store_email
+        email_data_dict = {
+            'sender': sender,
+            'receiver': 'api_user',
+            'subject': subject,
+            'body': body,
+            'user_email': 'api_user'
+        }
+        email_id = store_email(email_data_dict, attachment_path)
         
-        email_record = fetch_one("SELECT id FROM emails WHERE sender = %s AND subject = %s ORDER BY id DESC LIMIT 1", (sender, subject))
-        
-        if email_record:
-            label, confidence = analyze_email_content(email_record['id'], body, subject)
+        if email_id:
+            label, confidence = analyze_email_content(email_id, body, subject)
             
             response = jsonify({
                 'success': True,
@@ -301,59 +323,8 @@ def register():
     
     return render_template("register.html")
 
-# Simple authentication functions
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def create_users_table():
-    """Update existing users table to match app requirements"""
-    try:
-        # Add missing columns to existing users table
-        columns_to_add = [
-            ("email", "VARCHAR(100)"),
-            ("password_hash", "VARCHAR(255)"),
-            ("full_name", "VARCHAR(100)")
-        ]
-        
-        for column_name, column_def in columns_to_add:
-            try:
-                execute_query(f"ALTER TABLE users ADD COLUMN {column_name} {column_def}")
-                print(f"Added column {column_name}")
-            except Exception as e:
-                if "Duplicate column name" not in str(e):
-                    print(f"Column {column_name} error: {e}")
-        
-        print("Users table updated successfully")
-    except Exception as e:
-        print(f"Error updating users table: {e}")
-
-def authenticate_user(username, password):
-    # Try database authentication first
-    try:
-        hashed_password = hash_password(password)
-        # Try with password_hash field first
-        user = fetch_one("SELECT * FROM users WHERE username = %s AND password_hash = %s", (username, hashed_password))
-        
-        if not user:
-            # Fallback to plain password field
-            user = fetch_one("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
-        
-        if user:
-            # For admin user, always use rushabhkirad@gmail.com
-            email = 'rushabhkirad@gmail.com' if user['username'] == 'admin' else user.get('email', None)
-            return {
-                'id': user['id'],
-                'username': user['username'],
-                'email': email,
-                'full_name': user.get('full_name', 'Administrator')
-            }
-    except Exception as e:
-        print(f"Database auth error: {e}")
-    
-    # Fallback to hardcoded authentication (only for actual admin)
-    if username == "admin" and password == "admin123":
-        return {'id': 61, 'username': 'admin', 'email': 'rushabhkirad@gmail.com', 'full_name': 'Administrator'}
-    return None
+# hash_password and authenticate_user are imported from backend.auth.auth_utils
+# create_users_table is imported from backend.db.db_setup
 
 
 # 2. Dashboard (Inbox) - User-specific emails only
@@ -492,16 +463,33 @@ def analyze_email():
         sender = request.form.get("sender", "unknown@example.com")
         subject = request.form.get("subject", "No Subject")
         
-        # Save to database first
-        insert_query = "INSERT INTO emails (sender, subject, body) VALUES (%s, %s, %s)"
-        execute_query(insert_query, (sender, subject, email_text))
+        # Handle attachment if present
+        attachment = request.files.get("attachment")
+        attachment_path = None
+        if attachment and attachment.filename:
+            from werkzeug.utils import secure_filename
+            filename = secure_filename(attachment.filename)
+            attachment_dir = os.path.join(os.getcwd(), "attachments")
+            os.makedirs(attachment_dir, exist_ok=True)
+            filepath = os.path.join(attachment_dir, filename)
+            attachment.save(filepath)
+            attachment_path = filepath
         
-        # Get the inserted email ID
-        email_record = fetch_one("SELECT id FROM emails WHERE sender = %s AND subject = %s ORDER BY id DESC LIMIT 1", (sender, subject))
+        # Save to database using the designated ingestion utility
+        user_email = session.get('user_email') or session.get('email', 'api_user')
+        from backend.ingestion.save_to_db import store_email
+        email_data = {
+            'sender': sender,
+            'receiver': user_email,
+            'subject': subject,
+            'body': email_text,
+            'user_email': user_email
+        }
+        email_id = store_email(email_data, attachment_path)
         
-        if email_record:
-            # Analyze the email
-            label, confidence = analyze_email_content(email_record['id'], email_text, subject)
+        if email_id:
+            # Analyze the email using ML models
+            label, confidence = analyze_email_content(email_id, email_text, subject)
             
             flash(f"Email analyzed! Classification: {label.upper()} (Confidence: {confidence:.1%})", 
                   'success' if label == 'safe' else 'danger')
@@ -891,59 +879,73 @@ Unsubscribe: https://techcrunch.com/preferences
 
 # 8. Direct File Analysis (Test Mode)
 @app.route("/test/upload", methods=["GET", "POST"])
+@login_required
 def test_upload():
     if request.method == "GET":
         return render_template("test_upload.html")
     
-    if request.method == "POST":
-        try:
-            if 'file' not in request.files:
-                return jsonify({'success': False, 'error': 'No file uploaded'})
+    # POST
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'})
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'})
+        
+        # BUG FIX: Use secure_filename to prevent path-traversal attacks
+        from werkzeug.utils import secure_filename
+        filename = secure_filename(file.filename)
+        if not filename:
+            return jsonify({'success': False, 'error': 'Invalid filename'})
+        
+        att_dir = os.path.join(os.getcwd(), 'attachments')
+        os.makedirs(att_dir, exist_ok=True)
+        filepath = os.path.join(att_dir, filename)
+        file.save(filepath)
+        
+        print(f"Test Mode: Analyzing {filename}")
+        
+        dummy_subject = f"Test Analysis of {filename}"
+        dummy_body = "This is a test analysis of an uploaded file."
+        
+        # BUG FIX: Use store_email instead of a hardcoded dummy ID=999999
+        # which could collide with real emails and corrupt their labels.
+        from backend.ingestion.save_to_db import store_email
+        user_email = session.get('user_email') or session.get('email', 'test_user')
+        email_data = {
+            'sender': 'test@local',
+            'receiver': user_email,
+            'subject': dummy_subject,
+            'body': dummy_body,
+            'user_email': user_email
+        }
+        test_email_id = store_email(email_data, filepath)
+        
+        if not test_email_id:
+            return jsonify({'success': False, 'error': 'Failed to create test record'})
+        
+        label, confidence = analyze_email_content(test_email_id, dummy_body, dummy_subject)
+        
+        # Get OCR text if available (for display)
+        ocr_text = ""
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            from backend.analyzers.vision_analyzer import VisionAnalyzer
+            va = VisionAnalyzer()
+            res = va.analyze_image(filepath)
+            ocr_text = res.get('extracted_text', '')
+        
+        return jsonify({
+            'success': True,
+            'prediction': label,
+            'confidence': confidence,
+            'message': f"File classified as {label}",
+            'ocr_text': ocr_text
+        })
             
-            file = request.files['file']
-            if file.filename == '':
-                return jsonify({'success': False, 'error': 'No file selected'})
-            
-            if file:
-                # Save to temp
-                filename = file.filename
-                filepath = os.path.join("attachments", filename)
-                file.save(filepath)
-                
-                print(f"Test Mode: Analyzing {filename}")
-                
-                # Create a dummy email wrapper
-                dummy_email_id = 999999 # Dummy ID
-                dummy_subject = f"Test Analysis of {filename}"
-                dummy_body = "This is a test analysis of an uploaded file."
-                
-                # Analyze
-                # We need to temporarily insert a dummy record or modify hybrid_analysis to accept path directly
-                # For simplicity, we'll insert a dummy record
-                execute_query("INSERT INTO emails (id, sender, subject, body, attachment_path, user_email, label) VALUES (%s, %s, %s, %s, %s, %s, 'pending') ON DUPLICATE KEY UPDATE attachment_path=%s", 
-                             (dummy_email_id, 'test@local', dummy_subject, dummy_body, filepath, 'test_user', filepath))
-                
-                label, confidence = analyze_email_content(dummy_email_id, dummy_body, dummy_subject)
-                
-                # Get OCR text if available (for display)
-                ocr_text = ""
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    from backend.analyzers.vision_analyzer import VisionAnalyzer
-                    va = VisionAnalyzer()
-                    res = va.analyze_image(filepath)
-                    ocr_text = res.get('extracted_text', '')
-                
-                return jsonify({
-                    'success': True,
-                    'prediction': label,
-                    'confidence': confidence,
-                    'message': f"File classified as {label}",
-                    'ocr_text': ocr_text
-                })
-                
-        except Exception as e:
-            print(f"Test upload error: {e}")
-            return jsonify({'success': False, 'error': str(e)})
+    except Exception as e:
+        print(f"Test upload error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 # Test Gmail connection
 @app.route("/test_gmail_connection")
@@ -1144,8 +1146,9 @@ def how_it_works():
     stats = get_cached_stats(user_email) if user_email else {'total': 0, 'safe': 0, 'phishing': 0, 'pending': 0, 'starred': 0, 'unread': 0}
     return render_template("how_it_works.html", stats=stats, current_folder='how_it_works')
 
-# Database debug route
+# Database debug route — ADMIN ONLY (was unauthenticated, exposing all user data)
 @app.route("/debug_db")
+@admin_required
 def debug_db():
     try:
         # Test connection
@@ -1346,37 +1349,43 @@ def service_status():
 @admin_required
 def show_calculations():
     """Display PQC calculations in a readable format"""
+    # BUG FIX: pqc_calculations() returns a Flask Response object, not a dict.
+    # Calling .json on a Response is only available in test clients, not production.
+    # We extract the data directly using the shared helper logic instead.
     try:
-        calc_data = pqc_calculations()
-        calculations = calc_data.json['calculations']
-        
-        # Always show the page, even if there are errors
-        summary = calc_data.json.get('summary', {
-            'input_length': 0,
-            'salt_length': 0,
-            'derived_key_length': 0,
-            'encrypted_length': 0,
-            'final_storage_length': 0,
-            'verification_passed': False
+        user_email = session.get('user_email') or session.get('email')
+        stats = get_cached_stats(user_email)
+
+        # Call the underlying function via app test client context to get JSON safely
+        with app.test_client() as c:
+            with c.session_transaction() as sess:
+                sess.update(dict(session))
+            resp = c.get('/pqc_calculations')
+            calc_json = resp.get_json() or {}
+
+        calculations = calc_json.get('calculations', ['No calculation data available'])
+        summary = calc_json.get('summary', {
+            'input_length': 0, 'salt_length': 0, 'derived_key_length': 0,
+            'encrypted_length': 0, 'final_storage_length': 0, 'verification_passed': False
         })
-        
-        return render_template('pqc_calculations.html', 
+
+        return render_template('pqc_calculations.html',
                              calculations=calculations,
                              summary=summary,
-                             user_email=calc_data.json['user_email'],
-                             pqc_working=calc_data.json['success'],
-                             error_message=calc_data.json.get('error', ''),
-                             stats=get_cached_stats(session.get('user_email') or session.get('email')),
+                             user_email=calc_json.get('user_email', user_email),
+                             pqc_working=calc_json.get('success', False),
+                             error_message=calc_json.get('error', ''),
+                             stats=stats,
                              current_folder='calculations')
     except Exception as e:
-        # Show error page instead of redirecting
-        return render_template('pqc_calculations.html', 
+        user_email = session.get('user_email') or session.get('email')
+        return render_template('pqc_calculations.html',
                              calculations=[f"❌ SYSTEM ERROR: {str(e)}"],
                              summary={'verification_passed': False},
-                             user_email='Unknown',
+                             user_email=user_email or 'Unknown',
                              pqc_working=False,
                              error_message=str(e),
-                             stats=get_cached_stats(session.get('user_email') or session.get('email')),
+                             stats=get_cached_stats(user_email),
                              current_folder='calculations')
 
 @app.route("/test_pqc")
@@ -1884,13 +1893,15 @@ def admin_pqc_details():
             calculation_steps.append(f"Error: {str(e)}")
         
         # Get recent detailed PQC logs
-        recent_security_logs = fetch_all("""
-            SELECT action, user_email, details, timestamp
-            FROM logs 
-            WHERE action LIKE 'ENCRYPT_%" OR action LIKE "DECRYPT_%" OR action LIKE "KEY_%' 
-            ORDER BY timestamp DESC 
-            LIMIT 15
-        """) or []
+        # BUG FIX: The original SQL had a broken LIKE string — mixing Python quotes
+        # inside the triple-quoted SQL caused the WHERE clause to be syntactically invalid.
+        recent_security_logs = fetch_all(
+            "SELECT action, user_email, details, timestamp "
+            "FROM logs "
+            "WHERE action LIKE %s OR action LIKE %s OR action LIKE %s "
+            "ORDER BY timestamp DESC LIMIT 15",
+            ('ENCRYPT_%', 'DECRYPT_%', 'KEY_%')
+        ) or []
         
         formatted_security_logs = []
         for log in recent_security_logs:
@@ -1943,188 +1954,9 @@ def get_updates():
     except Exception as e:
         return jsonify({'error': str(e)})
 
-# Database initialization
-def init_database():
-    """Initialize database tables"""
-    try:
-        # Create users table
-        create_users_table()
-        
-        # Create logs table
-        create_logs_table()
-        
-        # Create user credentials table
-        create_user_credentials_table()
-        
-        # Add missing columns to emails table if they don't exist
-        try:
-            # Check if columns exist before adding
-            columns_to_add = [
-                ("label", "VARCHAR(20) DEFAULT 'pending'"),
-                ("confidence_score", "DECIMAL(3,2) DEFAULT 0.0"),
-                ("is_starred", "BOOLEAN DEFAULT FALSE"),
-                ("is_read", "BOOLEAN DEFAULT FALSE"),
-                ("is_archived", "BOOLEAN DEFAULT FALSE"),
-                ("attachment_path", "VARCHAR(500)"),
-                ("user_email", "VARCHAR(100)"),
-                ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-                ("encryption_method", "VARCHAR(50)"),
-                ("encrypted_content_key", "TEXT"),
-                ("threat_explanation", "TEXT"),
-                ("message_id", "VARCHAR(255) UNIQUE"),
-                ("feedback", "VARCHAR(20)") # New column for feedback
-            ]
-            
-            for column_name, column_def in columns_to_add:
-                try:
-                    execute_query(f"ALTER TABLE emails ADD COLUMN {column_name} {column_def}")
-                except Exception as e:
-                    if "Duplicate column name" not in str(e):
-                        print(f"Column {column_name} error: {e}")
-                    pass  # Column already exists
-                    
-            print("Database columns updated successfully")
-        except Exception as e:
-            print(f"Note: Some columns may already exist: {e}")
-        
-        # Test database connection
-        if test_database_connection():
-            # Create admin user
-            create_admin_user()
-            
-            # Show final user count
-            users = fetch_all("SELECT username, email FROM users") or []
-            print(f"📊 Total users in database: {len(users)}")
-        else:
-            print("⚠️  Database connection issues - check your MySQL settings")
-            
-    except Exception as e:
-        print(f"Database initialization error: {e}")
-        app.logger.error(f"Database initialization error: {e}")
-
-def create_logs_table():
-    """Create logs table if it doesn't exist"""
-    try:
-        create_table_query = """
-        CREATE TABLE IF NOT EXISTS logs (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            email_id INT,
-            action VARCHAR(100) NOT NULL,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            user_email VARCHAR(100),
-            details TEXT,
-            FOREIGN KEY (email_id) REFERENCES emails(id) ON DELETE CASCADE
-        )
-        """
-        execute_query(create_table_query)
-        print("Logs table created/verified successfully")
-    except Exception as e:
-        print(f"Error creating logs table: {e}")
-
-def create_user_credentials_table():
-    """Create user_credentials table with email as primary key"""
-    try:
-        create_table_query = """
-        CREATE TABLE IF NOT EXISTS user_credentials (
-            email VARCHAR(100) PRIMARY KEY,
-            user_id INT NOT NULL,
-            app_password VARCHAR(255) NOT NULL,
-            encryption_method VARCHAR(50) DEFAULT 'BASE64',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-        """
-        execute_query(create_table_query)
-        print("User credentials table created/verified successfully")
-    except Exception as e:
-        print(f"Error creating user credentials table: {e}")
-
-def create_admin_user():
-    """Create default admin user if not exists"""
-    try:
-        print("Checking for admin user...")
-        
-        # Clean up duplicate admin entries first
-        execute_query("DELETE FROM users WHERE username = 'admin' AND role != 'admin'")
-        execute_query("DELETE FROM users WHERE email = 'rushabhkirad@gmail.com' AND username != 'admin'")
-        
-        # Check if admin user exists
-        admin_user = fetch_one("SELECT id FROM users WHERE username = %s AND role = %s", ('admin', 'admin'))
-        print(f"Admin user query result: {admin_user}")
-        
-        if not admin_user:
-            print("Creating admin user...")
-            # Create admin user with both password fields
-            admin_password_hash = hash_password('admin123')
-            insert_query = "INSERT INTO users (username, password, password_hash, email, full_name, role, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-            result = execute_query(insert_query, ('admin', 'admin123', admin_password_hash, 'rushabhkirad@gmail.com', 'Administrator', 'admin', datetime.datetime.now()))
-            
-            if result:
-                print("✓ Admin user created successfully (admin/admin123)")
-                # Add admin credentials to user_credentials table
-                admin_user = fetch_one("SELECT id FROM users WHERE username = %s", ('admin',))
-                if admin_user:
-                    import base64
-                    admin_app_password = base64.b64encode('tddj aptv vqms zoqc'.encode()).decode()
-                    execute_query("REPLACE INTO user_credentials (email, user_id, app_password) VALUES (%s, %s, %s)", 
-                                ('rushabhkirad@gmail.com', admin_user['id'], admin_app_password))
-                    print("✓ Admin credentials added to user_credentials table")
-            else:
-                print("✗ Failed to create admin user")
-        else:
-            print("✓ Admin user already exists")
-            # Update existing admin user with missing fields
-            try:
-                admin_password_hash = hash_password('admin123')
-                execute_query("UPDATE users SET password_hash = %s, email = %s, full_name = %s, role = %s WHERE username = %s", 
-                            (admin_password_hash, 'rushabhkirad@gmail.com', 'Administrator', 'admin', 'admin'))
-                # Add/update admin credentials
-                admin_user = fetch_one("SELECT id FROM users WHERE username = %s", ('admin',))
-                if admin_user:
-                    import base64
-                    admin_app_password = base64.b64encode('tddj aptv vqms zoqc'.encode()).decode()
-                    execute_query("REPLACE INTO user_credentials (email, user_id, app_password) VALUES (%s, %s, %s)", 
-                                ('rushabhkirad@gmail.com', admin_user['id'], admin_app_password))
-                    print("✓ Admin credentials updated in user_credentials table")
-                print("✓ Admin user updated with missing fields")
-            except Exception as update_error:
-                print(f"Update error: {update_error}")
-            
-    except Exception as e:
-        print(f"Error creating admin user: {e}")
-
-def test_database_connection():
-    """Test database connection and show status"""
-    try:
-        print("Testing database connection...")
-        result = fetch_one("SELECT 1 as test")
-        print(f"Connection test result: {result}")
-        
-        if result:
-            print("✓ Database connection successful")
-            
-            # Check if users table exists
-            try:
-                table_check = fetch_one("SHOW TABLES LIKE 'users'")
-                print(f"Users table exists: {table_check}")
-                
-                if table_check:
-                    # Show users table status
-                    users = fetch_all("SELECT username, email, full_name FROM users") or []
-                    print(f"✓ Users table has {len(users)} users")
-                    for user in users:
-                        print(f"  - {user['username']} ({user['email']}) - {user['full_name']}")
-                else:
-                    print("⚠️ Users table does not exist")
-                    
-            except Exception as table_error:
-                print(f"Error checking users table: {table_error}")
-                
-        return True
-    except Exception as e:
-        print(f"✗ Database connection failed: {e}")
-        return False
+# init_database, create_logs_table, create_user_credentials_table,
+# create_admin_user, and test_database_connection are all in backend.db.db_setup
+# and imported at the top of this file.
 
 # -------------------------
 if __name__ == "__main__":

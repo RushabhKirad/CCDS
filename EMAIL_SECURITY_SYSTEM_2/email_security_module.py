@@ -18,20 +18,39 @@ class EmailSecurityModule:
             pass
     
     def analyze_email(self, data):
-        """Analyze email data"""
+        """Analyze email data using real ML models"""
         try:
             email_text = data.get('body', '')
             subject = data.get('subject', '')
             sender = data.get('sender', '')
+            attachment_path = data.get('attachment_path', None)
+            user_email = data.get('user_email', 'api_user')
             
-            # Simple analysis result
-            return {
-                'classification': 'safe',
-                'confidence': 0.85,
-                'sender': sender,
-                'subject': subject,
-                'threats_detected': []
+            from backend.ingestion.save_to_db import store_email
+            
+            # Save to database to get an ID for hybrid_analyze_email
+            email_data = {
+                "sender": sender,
+                "receiver": user_email,
+                "subject": subject,
+                "body": email_text,
+                "user_email": user_email
             }
+            email_id = store_email(email_data, attachment_path)
+            
+            if email_id and self.model_loader:
+                # Run the actual ML scoring
+                label, confidence = hybrid_analyze_email(email_id, email_text, subject, self.model_loader)
+                return {
+                    'classification': label,
+                    'confidence': float(confidence),
+                    'sender': sender,
+                    'subject': subject,
+                    'is_threat': (label == 'phishing')
+                }
+            else:
+                return {'error': 'Failed to save email or load models'}
+                
         except Exception as e:
             return {'error': str(e)}
     

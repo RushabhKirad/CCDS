@@ -55,19 +55,32 @@ def analyze_email():
     Analyze email for threats
     
     POST /email-security/api/v1/analyze
-    Body: {
-        "sender": "test@example.com",
-        "subject": "Test Subject",
-        "body": "Email body",
-        "urls": ["http://example.com"],
-        "attachments": ["file.pdf"]
-    }
+    Supports both application/json and multipart/form-data
     """
     try:
-        data = request.get_json()
-        
+        data = None
+        if request.is_json:
+            data = request.get_json()
+        elif request.form or request.files:
+            import os
+            from werkzeug.utils import secure_filename
+            
+            data = dict(request.form)
+            attachment = request.files.get("attachment")
+            if attachment and attachment.filename:
+                filename = secure_filename(attachment.filename)
+                attachment_dir = os.path.join(os.getcwd(), "attachments")
+                os.makedirs(attachment_dir, exist_ok=True)
+                filepath = os.path.join(attachment_dir, filename)
+                attachment.save(filepath)
+                data['attachment_path'] = filepath
+        else:
+            return jsonify({'error': 'Unsupported Media Type, please send JSON or multipart/form-data'}), 415
+            
         if not data:
             return jsonify({'error': 'No data provided'}), 400
+            
+        data['user_email'] = f"user_{getattr(request, 'user_id', 'api_user')}@api"
         
         # Analyze email
         result = email_module.analyze_email(data)

@@ -61,6 +61,10 @@ class URLDeepAnalyzer:
                 creation_date = creation_date[0]
             
             if creation_date:
+                # BUG FIX #7: Strip timezone info to avoid TypeError when WHOIS
+                # returns a timezone-aware datetime and now() is naive.
+                if hasattr(creation_date, 'tzinfo') and creation_date.tzinfo is not None:
+                    creation_date = creation_date.replace(tzinfo=None)
                 age_days = (datetime.datetime.now() - creation_date).days
                 return age_days
             return -1

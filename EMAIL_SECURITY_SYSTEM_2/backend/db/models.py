@@ -1,4 +1,9 @@
 # backend/db/models.py
+import sys
+import os
+# Ensure project root is on sys.path so 'backend.*' imports work when run standalone
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 from backend.db.db_utils import execute_query, fetch_query
 
 # Users
