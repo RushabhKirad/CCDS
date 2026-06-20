@@ -122,6 +122,10 @@ print(f"\n{'STAGE 4: INDIVIDUAL MODEL PREDICTIONS':^70}")
 print(sep)
 
 # 4a: Text model
+# NOTE: hybrid_analysis.py applies a noise-floor to the raw ML score:
+#   effective_score = raw if raw >= 0.65 else raw * 0.5
+# So the effective classification threshold is 0.65, not 0.5.
+# Borderline safe emails (0.50-0.65) are handled by the false-positive guard.
 print("  4a. Text Model:")
 text_tests = [
     ("URGENT click verify http://fake.xyz/login enter PIN SSN", "phishing"),
@@ -132,11 +136,13 @@ if model_loader:
         try:
             vec = model_loader.text_vect.transform([txt])
             proba = model_loader.text_model.predict_proba(vec)[0]
-            phish_score = proba[1] if len(proba) > 1 else proba[0]
-            predicted = "phishing" if phish_score >= 0.5 else "safe"
+            raw_score = proba[1] if len(proba) > 1 else proba[0]
+            # Apply same noise-floor as hybrid_analysis.py
+            effective_score = raw_score if raw_score >= 0.65 else raw_score * 0.5
+            predicted = "phishing" if effective_score >= 0.5 else "safe"
             ok = predicted == expected
             check(f"  Text '{txt[:40]}...'", ok,
-                  f"Pred={predicted.upper()} Score={phish_score:.3f} Exp={expected.upper()}")
+                  f"Pred={predicted.upper()} RawScore={raw_score:.3f} EffScore={effective_score:.3f} Exp={expected.upper()}")
         except Exception as e:
             check(f"  Text prediction", False, str(e))
 
@@ -311,7 +317,7 @@ for name, ok in results:
     print(f"  {'[OK]' if ok else '[X] '} {name}")
 print(f"\n{SEP}")
 if failed == 0:
-    print("  ✅  ALL PIPELINE STAGES HEALTHY")
+    print("  [OK] ALL PIPELINE STAGES HEALTHY")
 else:
-    print(f"  ⚠️   {failed} ISSUE(S) NEED ATTENTION — see [X] items above")
+    print(f"  [!]  {failed} ISSUE(S) NEED ATTENTION -- see [X] items above")
 print(SEP)

@@ -1,12 +1,76 @@
 import re
 import os
+from urllib.parse import urlparse
 from backend.db.db_utils import execute_query, fetch_one
 from backend.analyzers.vision_analyzer import VisionAnalyzer
 from backend.analyzers.url_deep_analyzer import URLDeepAnalyzer
 from backend.analyzers.attachment_analyzer import extract_features
 from backend.analyzers.auth_header_analyzer import AuthHeaderAnalyzer
-from backend.analyzers.advanced_phishing_detector import get_advanced_phishing_score
+from backend.analyzers.advanced_phishing_detector import get_advanced_phishing_score, KNOWN_BRANDS
 # from backend.analyzers.bert_analyzer import BertAnalyzer # Commented out to prevent slow load on dev
+
+# ---------------------------------------------------------------------------
+# EMAIL SENDER VALIDATION HELPER
+# ---------------------------------------------------------------------------
+_EMAIL_REGEX = re.compile(r'^[\w\.\_\+\-]+@([\w\-]+\.)+[\w]{2,}$', re.IGNORECASE)
+
+def is_valid_email_address(email: str) -> bool:
+    """
+    Returns True if `email` has a valid format AND the sender domain has
+    at least one MX or A record in DNS. Returns False otherwise.
+    """
+    email = email.strip().lower()
+    if not _EMAIL_REGEX.match(email):
+        return False
+    domain = email.split('@')[-1]
+    try:
+        import dns.resolver
+        # Try MX first (proper mail domain)
+        try:
+            dns.resolver.resolve(domain, 'MX', lifetime=3)
+            return True
+        except Exception:
+            pass
+        # Fallback: check A record (some small domains use A only)
+        try:
+            dns.resolver.resolve(domain, 'A', lifetime=3)
+            return True
+        except Exception:
+            pass
+        return False
+    except ImportError:
+        # dnspython not installed — skip DNS check, trust format only
+        return True
+
+
+# ---------------------------------------------------------------------------
+# URL FAKE-BRAND CHECK HELPER
+# ---------------------------------------------------------------------------
+def _is_fake_brand_url(url: str) -> bool:
+    """
+    Returns True if the URL looks like it is impersonating a known brand
+    (e.g. paypal-verify.tk/login) but is NOT actually hosted on a legitimate
+    brand domain.  Returns False for real brand domains (google.com, etc.).
+    """
+    try:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower().split(':')[0]  # strip port
+        if not host:
+            return False
+        host_root = host.split('.')  # ['paypal-verify', 'tk']
+        # Build a dotted suffix from the last two parts for comparison
+        domain_suffix = '.'.join(host_root[-2:]) if len(host_root) >= 2 else host
+
+        for brand, legit_domains in KNOWN_BRANDS.items():
+            # If the host IS a legitimate domain for this brand → not fake
+            if any(host == ld or host.endswith('.' + ld) for ld in legit_domains):
+                return False
+            # If the brand name appears in the hostname but it is NOT legitimate → fake
+            if brand in host and not any(host == ld or host.endswith('.' + ld) for ld in legit_domains):
+                return True
+        return False
+    except Exception:
+        return False
 
 # Initialize analyzers
 vision_analyzer = VisionAnalyzer()
@@ -32,7 +96,61 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
         user_email = email_data['user_email'] if email_data else 'unknown'
         sender = email_data['sender'].lower() if email_data and email_data['sender'] else ''
         attachment_path = email_data['attachment_path'] if email_data else None
-        
+
+        # ── STEP 0: SENDER EMAIL VALIDATION ──────────────────────────────────
+        # Extract the raw email address from the sender field
+        # (handles both plain 'user@domain.com' and 'Display Name <user@domain.com>')
+        sender_match = re.search(r'[\w\.\+\-]+@([\w\-]+\.)+\w{2,}', sender)
+        sender_email_raw = sender_match.group(0) if sender_match else ''
+
+        if not sender_email_raw:
+            # No recognisable email address at all → definitely suspicious
+            print(f"[STEP 0] No valid email address found in sender: '{sender}'")
+            threat_explanation = f"Invalid sender: no recognisable email address found in '{sender}'"
+            execute_query(
+                "UPDATE emails SET label=%s, confidence_score=%s, threat_explanation=%s WHERE id=%s",
+                ('phishing', 0.90, threat_explanation, email_id)
+            )
+            execute_query(
+                "INSERT INTO logs (email_id, action, timestamp, user_email, details) VALUES (%s, %s, NOW(), %s, %s)",
+                (email_id, 'hybrid_analysis_phishing', user_email, 'Sender validation failed: no email address')
+            )
+            return 'phishing', 0.90
+
+        sender_domain = sender_email_raw.split('@')[-1]
+        print(f"[STEP 0] Validating sender: {sender_email_raw}")
+
+        # Known-good free providers we trust for format only (DNS check may be
+        # slow / unreliable for major providers with many MX shards).
+        ALWAYS_VALID_DOMAINS = {
+            'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.in',
+            'outlook.com', 'hotmail.com', 'live.com', 'icloud.com',
+            'protonmail.com', 'proton.me', 'zoho.com',
+        }
+
+        if sender_domain not in ALWAYS_VALID_DOMAINS:
+            if not is_valid_email_address(sender_email_raw):
+                print(f"[STEP 0] INVALID sender domain — no DNS records for: {sender_domain}")
+                threat_explanation = (
+                    f"Sender validation FAILED: domain '{sender_domain}' has no active "
+                    f"MX or A DNS records — likely a spoofed or non-existent domain"
+                )
+                execute_query(
+                    "UPDATE emails SET label=%s, confidence_score=%s, threat_explanation=%s WHERE id=%s",
+                    ('phishing', 0.90, threat_explanation, email_id)
+                )
+                execute_query(
+                    "INSERT INTO logs (email_id, action, timestamp, user_email, details) VALUES (%s, %s, NOW(), %s, %s)",
+                    (email_id, 'hybrid_analysis_phishing', user_email,
+                     f'Sender validation failed: no DNS records for {sender_domain}')
+                )
+                print(f"Email {email_id}: PHISHING (0.90) — invalid sender domain")
+                return 'phishing', 0.90
+            else:
+                print(f"[STEP 0] Sender domain OK (DNS valid): {sender_domain}")
+        else:
+            print(f"[STEP 0] Sender domain on trusted-provider list: {sender_domain}")
+
         text_content = (email_text + " " + subject).lower()
         
         # STEP 0a: AUTHENTICATION CHECKS (SPF/DKIM)
@@ -70,9 +188,13 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
                 text_vector = model_loader.text_vect.transform([email_text + " " + subject])
                 text_prediction = model_loader.text_model.predict_proba(text_vector)[0]
                 if len(text_prediction) > 1:
-                    text_ml_score = text_prediction[1]
+                    raw_ml = text_prediction[1]
+                    # Only carry the ML score if it is clearly above the noise floor (>= 0.65).
+                    # Scores in 0.50–0.65 are borderline and handled by the rule engine +
+                    # false-positive guard, so we clamp them to avoid unfair penalties.
+                    text_ml_score = raw_ml if raw_ml >= 0.65 else raw_ml * 0.5
                 ml_available = True
-                print(f"Text ML Score: {text_ml_score:.3f}")
+                print(f"Text ML Score: {text_ml_score:.3f} (raw={text_prediction[1]:.3f})")
             except Exception as e:
                 print(f"Text ML error: {e}")
                 ml_available = False
@@ -140,10 +262,36 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
                 deep_risks.append(f"Suspicious email domain in body: {domain}")
                 print(f"Body email domain risk: {domain}")
         
+        # Trusted URL domains — skip ML scoring if all URLs come from here
+        TRUSTED_URL_DOMAINS = {
+            'google.com', 'www.google.com', 'mail.google.com', 'drive.google.com',
+            'docs.google.com', 'accounts.google.com', 'youtube.com', 'www.youtube.com',
+            'microsoft.com', 'www.microsoft.com', 'office.com', 'outlook.com',
+            'outlook.office.com', 'login.microsoftonline.com', 'live.com',
+            'apple.com', 'www.apple.com', 'support.apple.com', 'icloud.com',
+            'amazon.com', 'www.amazon.com', 'amazon.in', 'www.amazon.in',
+            'linkedin.com', 'www.linkedin.com', 'facebook.com', 'www.facebook.com',
+            'twitter.com', 'www.twitter.com', 'x.com', 'instagram.com',
+            'github.com', 'stackoverflow.com', 'wikipedia.org', 'en.wikipedia.org',
+            'paypal.com', 'www.paypal.com', 'netflix.com', 'www.netflix.com',
+            'spotify.com', 'zoom.us', 'slack.com', 'dropbox.com',
+            'naukri.com', 'indeed.com', 'glassdoor.com', 'reddit.com',
+        }
+
         if urls:
             # 2a. URL ML Analysis
+            # Skip ML if ALL URLs belong to well-known trusted domains
             try:
-                if model_loader and hasattr(model_loader, 'url_model') and hasattr(model_loader, 'url_vect'):
+                trusted_only = all(
+                    urlparse(u).netloc.lower().lstrip('www.') in TRUSTED_URL_DOMAINS
+                    or urlparse(u).netloc.lower() in TRUSTED_URL_DOMAINS
+                    for u in urls
+                )
+                if trusted_only:
+                    print(f"URL ML Score: SKIPPED (all URLs from trusted domains)")
+                    url_ml_score = 0.0
+                    url_ml_available = True
+                elif model_loader and hasattr(model_loader, 'url_model') and hasattr(model_loader, 'url_vect'):
                     for url in urls:
                         url_vector = model_loader.url_vect.transform([url])
                         url_prediction = model_loader.url_model.predict_proba(url_vector)[0]
@@ -156,22 +304,30 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
                 url_ml_available = False
             
             # 2b. URL Rule-based Analysis (EXPANDED PATTERNS)
+            # NOTE: The old brand-domain regex r'(google|paypal|...).*(?!\.(com|org|net))'
+            # used a negative lookahead that does NOT work as expected in Python re —
+            # it flags google.com, microsoft.com, etc. as phishing. Replaced with
+            # the _is_fake_brand_url() helper that does proper domain parsing.
             dangerous_patterns = [
                 r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b',  # IP addresses
                 r'(bit\.ly|tinyurl|short\.link|t\.co)',  # URL shorteners
                 r'(login|verify|secure|account|update|confirm).*\.(tk|ml|ga|cf|xyz|top|pw)',  # Suspicious TLDs
-                r'(paypal|bank|amazon|microsoft|apple|google).*(?!\.(com|org|net))',  # Fake brand domains
                 r'(fake|phish|scam|hack|verify|secure)[^/]*\.',  # Suspicious subdomains
                 r'\-verify|verify\-|\-secure|secure\-|\-login|login\-',  # Hyphened suspicious words
                 r'\@[^\s]+\.(tk|ml|ga|cf|xyz)',  # Email-like URLs with bad TLDs
             ]
-            
+
             for url in urls:
                 url_lower = url.lower()
+                matched = False
                 for pattern in dangerous_patterns:
                     if re.search(pattern, url_lower):
                         url_rule_score += 0.35
+                        matched = True
                         break
+                # Fake brand domain check (replaces broken regex)
+                if not matched and _is_fake_brand_url(url):
+                    url_rule_score += 0.35
             url_rule_score = min(1.0, url_rule_score)
             print(f"URL Rule Score: {url_rule_score:.3f}")
             

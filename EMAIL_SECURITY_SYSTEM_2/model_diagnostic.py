@@ -99,12 +99,16 @@ except Exception as e:
 print('\n' + '=' * 60)
 print('SUMMARY:')
 print('=' * 60)
-print("""
-BOTH Text and URL vectorizers are missing the 'idf_' attribute.
-This means they were saved BEFORE being fitted with training data.
 
-To fix: The vectorizers need to be RETRAINED and saved properly.
-The training code should call:
-  vectorizer.fit_transform(training_texts)  # NOT just fit()
-  joblib.dump(vectorizer, 'vectorizer.pkl')
-""")
+text_idf_ok = text_vect is not None and hasattr(text_vect, 'idf_')
+url_idf_ok  = url_vect  is not None and hasattr(url_vect,  'idf_')
+
+if text_idf_ok and url_idf_ok:
+    print('\n   [OK] All models and vectorizers are properly fitted and ready.')
+    print('   [OK] Text vectorizer idf_: present')
+    print('   [OK] URL  vectorizer idf_: present')
+else:
+    if not text_idf_ok:
+        print('\n   [X] Text vectorizer idf_ MISSING — run retrain_models.py to fix.')
+    if not url_idf_ok:
+        print('\n   [X] URL vectorizer idf_ MISSING — run fix_url_model.py to fix.')
