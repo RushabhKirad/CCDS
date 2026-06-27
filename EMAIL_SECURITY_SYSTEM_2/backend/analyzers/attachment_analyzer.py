@@ -5,17 +5,22 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
 
-# Paths
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_PATH = os.path.join(BASE_DIR, "..", "data", "raw", "Final.csv")
-MODEL_PATH = os.path.join(BASE_DIR, "..", "models", "attachment_model.pkl")
+# Paths — BASE_DIR resolves to backend/analyzers, so go up two levels to project root
+ROOT_DIR   = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_PATH  = os.path.join(ROOT_DIR, 'data', 'Final.csv')
+MODEL_PATH = os.path.join(ROOT_DIR, 'models', 'attachment_model.pkl')
 
-# List of relevant features for PDF/attachment analysis
+# Full feature list matching the retrained model (31 features)
 FEATURES = [
+    # Size and structural metadata
     'pdf_size', 'metadata_size', 'pages', 'xref_length', 'title_characters',
-    'isEncrypted', 'embedded_files', 'images', 'contains_text', 'JS', 'Javascript',
-    'AA', 'OpenAction', 'Acroform', 'JBIG2Decode', 'RichMedia', 'launch',
-    'EmbeddedFile', 'XFA', 'URI', 'Colors'
+    # PDF structure object counts (raw numeric, extracted from PDF body)
+    'obj', 'endobj', 'stream', 'endstream', 'xref', 'trailer', 'startxref',
+    'pageno', 'encrypt', 'ObjStm',
+    # Binary security features
+    'isEncrypted', 'embedded_files', 'images', 'contains_text',
+    'JS', 'Javascript', 'AA', 'OpenAction', 'Acroform',
+    'JBIG2Decode', 'RichMedia', 'launch', 'EmbeddedFile', 'XFA', 'URI', 'Colors',
 ]
 
 TARGET = 'class'  # Benign / Malicious

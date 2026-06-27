@@ -72,10 +72,17 @@ class URLDeepAnalyzer:
             logger.warning(f"WHOIS lookup failed for {domain}: {e}")
             return -1
 
-    def analyze_url(self, url):
+    def analyze_url(self, url, sender_credibility: float = 0.0):
         """
         Performs deep analysis on a URL.
-        
+
+        Args:
+            url: The URL string to analyse.
+            sender_credibility: Credibility score of the sender domain (0.0–1.0).
+                When >= 0.60, SSL check is skipped — established senders' CDN
+                infrastructure often fails raw socket SSL checks even for
+                perfectly valid certificates, causing false risk scores.
+
         Returns:
             dict: Analysis results and risk score (0.0 - 1.0).
         """
@@ -112,18 +119,27 @@ class URLDeepAnalyzer:
                 result['score'] += 0.4
                 result['risk_factors'].append("Potential Homograph Attack")
                 
-            # 3. Network Features (Timeboxed)
-            # SSL Check
-            is_ssl_valid, ssl_msg = self.check_ssl(domain)
-            if not is_ssl_valid:
-                result['score'] += 0.3
-                result['risk_factors'].append(f"SSL Issue: {ssl_msg}")
+            # 3. SSL Check — skipped for credible sender domains.
+            # Reason: major CDN-backed sites (openai.com, internshala.com, etc.)
+            # sometimes fail a raw socket SSL handshake even though their
+            # certificates are valid — this caused false +0.3 risk scores.
+            # We trust the system-level TLS verification for high-credibility senders.
+            if sender_credibility < 0.60:
+                is_ssl_valid, ssl_msg = self.check_ssl(domain)
+                if not is_ssl_valid:
+                    result['score'] += 0.3
+                    result['risk_factors'].append(f"SSL Issue: {ssl_msg}")
             
-            # WHOIS (Domain Age) - Skip for common domains to save time
-            common_domains = ['google.com', 'gmail.com', 'microsoft.com', 'yahoo.com']
-            if domain not in common_domains:
+            # WHOIS (Domain Age) — Skip for credible-sender domains and
+            # for well-known large domains that are always old.
+            skip_whois_domains = {
+                'google.com', 'gmail.com', 'microsoft.com', 'yahoo.com',
+                'amazon.com', 'facebook.com', 'apple.com', 'linkedin.com',
+                'naukri.com', 'openai.com', 'internshala.com', 'github.com',
+            }
+            if domain not in skip_whois_domains and sender_credibility < 0.60:
                 age = self.check_whois(domain)
-                if age != -1 and age < 30: # Less than 30 days old
+                if age != -1 and age < 30:  # Less than 30 days old
                     result['score'] += 0.4
                     result['risk_factors'].append(f"Newly Created Domain ({age} days)")
             

@@ -1958,20 +1958,7 @@ def get_updates():
 # create_admin_user, and test_database_connection are all in backend.db.db_setup
 # and imported at the top of this file.
 
-# -------------------------
-if __name__ == "__main__":
-    print("Starting Email Security System with Real-time Monitoring...")
-    print("Emails will be automatically fetched and analyzed in real-time!")
-    print("Access: http://localhost:5001")
-    print(f"Debug mode: {app.config['DEBUG']}")
-    
-    # Initialize database
-    init_database()
-    
-    # Disable automatic real-time monitoring to prevent background fetching
-    # Users will fetch emails manually when needed
-    print("Real-time monitoring disabled - users fetch emails manually")
-    
-    # Run the application
-    port = int(os.getenv('PORT', 5000))
-    app.run(debug=app.config['DEBUG'], host='0.0.0.0', port=port)
+# ---------------------------------------------------------------------------
+# Entry point is run.py — do NOT add __main__ here.
+# Import this module as: from app import app
+# ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ from backend.analyzers.url_deep_analyzer import URLDeepAnalyzer
 from backend.analyzers.attachment_analyzer import extract_features
 from backend.analyzers.auth_header_analyzer import AuthHeaderAnalyzer
 from backend.analyzers.advanced_phishing_detector import get_advanced_phishing_score, KNOWN_BRANDS
+from backend.analyzers.domain_credibility import domain_credibility_analyzer
 # from backend.analyzers.bert_analyzer import BertAnalyzer # Commented out to prevent slow load on dev
 
 # ---------------------------------------------------------------------------
@@ -17,29 +18,50 @@ _EMAIL_REGEX = re.compile(r'^[\w\.\_\+\-]+@([\w\-]+\.)+[\w]{2,}$', re.IGNORECASE
 def is_valid_email_address(email: str) -> bool:
     """
     Returns True if `email` has a valid format AND the sender domain has
-    at least one MX or A record in DNS. Returns False otherwise.
+    at least one MX or A record in DNS. Returns False if domain definitively does not exist.
     """
     email = email.strip().lower()
     if not _EMAIL_REGEX.match(email):
         return False
     domain = email.split('@')[-1]
+    
     try:
         import dns.resolver
-        # Try MX first (proper mail domain)
+        import dns.exception
+        
+        resolver = dns.resolver.Resolver()
+        # Fallback to public DNS servers if nameservers list is empty or local lookup fails
+        if not resolver.nameservers or resolver.nameservers == ['127.0.0.1']:
+            resolver.nameservers = ['8.8.8.8', '1.1.1.1']
+    except Exception:
         try:
-            dns.resolver.resolve(domain, 'MX', lifetime=3)
-            return True
+            resolver = dns.resolver.Resolver(configure=False)
+            resolver.nameservers = ['8.8.8.8', '1.1.1.1']
         except Exception:
-            pass
-        # Fallback: check A record (some small domains use A only)
+            # Fallback if dnspython is not importable
+            return True
+
+    try:
+        # Try MX first
         try:
-            dns.resolver.resolve(domain, 'A', lifetime=3)
+            resolver.resolve(domain, 'MX', lifetime=3)
             return True
+        except dns.resolver.NXDOMAIN:
+            return False
+        except (dns.resolver.NoAnswer, dns.exception.Timeout, dns.resolver.NoNameservers):
+            # Fallback: check A record
+            try:
+                resolver.resolve(domain, 'A', lifetime=3)
+                return True
+            except dns.resolver.NXDOMAIN:
+                return False
+            except Exception:
+                # If network fails, err on side of caution (allow format only)
+                return True
         except Exception:
-            pass
-        return False
-    except ImportError:
-        # dnspython not installed — skip DNS check, trust format only
+            return True
+    except Exception:
+        # Any other import or socket errors, trust the format match
         return True
 
 
@@ -150,6 +172,24 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
                 print(f"[STEP 0] Sender domain OK (DNS valid): {sender_domain}")
         else:
             print(f"[STEP 0] Sender domain on trusted-provider list: {sender_domain}")
+
+        # ── STEP 0c: DOMAIN CREDIBILITY SCORING ──────────────────────────
+        # Scores the sender domain 0.0 (unknown/suspicious) → 1.0 (established)
+        # using TLD reputation, domain age, structure, SSL, and category signals.
+        # This is NOT a whitelist — any domain scores based on objective signals.
+        try:
+            sender_credibility = domain_credibility_analyzer.score(sender_domain)
+            detail = domain_credibility_analyzer.get_detail(sender_domain)
+            print(f"[STEP 0c] Domain credibility for '{sender_domain}': {sender_credibility:.3f}")
+            if detail.get('breakdown'):
+                bd = detail['breakdown']
+                print(f"  TLD={bd.get('tld',0):.2f} Structure={bd.get('structure',0):.2f} "
+                      f"Keywords={bd.get('no_suspicious_keywords',0):.2f} "
+                      f"SSL={bd.get('ssl',0):.2f} Age={bd.get('age_score',0):.2f} "
+                      f"Category={bd.get('category','unknown')}({bd.get('category_score',0):.2f})")
+        except Exception as _cred_err:
+            sender_credibility = 0.0
+            print(f"[STEP 0c] Domain credibility check failed: {_cred_err}")
 
         text_content = (email_text + " " + subject).lower()
         
@@ -335,7 +375,7 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
             # (deep_url_score and deep_risks already initialized above)
             try:
                 for url in urls[:3]: # Analyze top 3 URLs to save time
-                    deep_analysis = url_deep_analyzer.analyze_url(url)
+                    deep_analysis = url_deep_analyzer.analyze_url(url, sender_credibility=sender_credibility)
                     if deep_analysis['score'] > 0:
                         deep_url_score = max(deep_url_score, deep_analysis['score'])
                         deep_risks.extend(deep_analysis['risk_factors'])
@@ -361,23 +401,42 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
         attachment_final_score = 0
         
         if attachment_path:
-            # 3a. Attachment ML Analysis (simplified)
+            # 3a. Attachment ML Analysis
             try:
                 if model_loader and hasattr(model_loader, 'attachment_model'):
                     if os.path.exists(attachment_path):
-                        file_size = os.path.getsize(attachment_path)
+                        file_size_bytes = os.path.getsize(attachment_path)
+                        file_size_kb = file_size_bytes / 1024.0  # Training data uses KB
                         # Extract real features if PDF
                         if attachment_path.lower().endswith('.pdf'):
-                            features = extract_features(attachment_path)
-                            print(f"Extracted PDF features: {features}")
+                            features_raw = extract_features(attachment_path)
+                            print(f"Extracted PDF features: {features_raw}")
                         else:
-                            # Fallback for non-PDFs (simplified)
-                            features = [
-                                file_size, 0, 1, 0, len(os.path.basename(attachment_path)),
+                            # Fallback for non-PDFs
+                            features_raw = [
+                                file_size_kb, 0, 1, 0, len(os.path.basename(attachment_path)),
                                 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
                             ]
-                        
-                        attachment_prediction = model_loader.attachment_model.predict_proba([features])[0]
+
+                        # Build DataFrame with named features for the Pipeline model.
+                        # The new model expects feature names to avoid sklearn warnings.
+                        import pandas as _pd
+                        _ATTACH_FEATURES = [
+                            'pdf_size', 'metadata_size', 'pages', 'xref_length', 'title_characters',
+                            'obj', 'endobj', 'stream', 'endstream', 'xref', 'trailer', 'startxref',
+                            'pageno', 'encrypt', 'ObjStm',
+                            'isEncrypted', 'embedded_files', 'images', 'contains_text',
+                            'JS', 'Javascript', 'AA', 'OpenAction', 'Acroform',
+                            'JBIG2Decode', 'RichMedia', 'launch', 'EmbeddedFile', 'XFA', 'URI', 'Colors'
+                        ]
+                        # Pad or trim to match expected feature count
+                        _n = len(_ATTACH_FEATURES)
+                        features_padded = (list(features_raw) + [0] * _n)[:_n]
+                        import warnings as _warn
+                        with _warn.catch_warnings():
+                            _warn.simplefilter('ignore')
+                            feat_df = _pd.DataFrame([features_padded], columns=_ATTACH_FEATURES)
+                            attachment_prediction = model_loader.attachment_model.predict_proba(feat_df)[0]
                         if len(attachment_prediction) > 1:
                             attachment_ml_score = attachment_prediction[1]
                         print(f"Attachment ML Score: {attachment_ml_score:.3f}")
@@ -462,7 +521,7 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
             url_weight  = 0.25
             adv_weight  = 0.20
 
-        # Calculate ensemble score
+        # Calculate raw ensemble score
         ensemble_score = (
             text_final_score       * text_weight +
             url_final_score        * url_weight +
@@ -474,7 +533,52 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
         ensemble_score += auth_score_penalty
         ensemble_score = min(1.0, ensemble_score)
 
-        print(f"Ensemble Score: {ensemble_score:.3f} (T:{text_weight}, U:{url_weight}, ADV:{adv_weight}, A:{attachment_weight})")
+        print(f"Ensemble Score (pre-credibility): {ensemble_score:.3f} (T:{text_weight}, U:{url_weight}, ADV:{adv_weight}, A:{attachment_weight})")
+
+        # ── DOMAIN CREDIBILITY DAMPENER ───────────────────────────────────
+        # When the sender domain is established and credible, a high ML text
+        # score is more likely a false positive (marketing language, job alerts,
+        # notifications) than real phishing.
+        #
+        # The dampener ONLY fires when:
+        #   (a) sender credibility is meaningful (>= 0.50)
+        #   (b) NO hard rule-based threat signals are present
+        #   (c) NO advanced phishing override has been triggered
+        #   (d) URL/attachment component scores are clean (< 0.35)
+        #
+        # This means: real phishing through an established-looking domain
+        # will STILL be caught by rule-based checks, advanced signals, or
+        # URL/attachment analysis. The dampener only handles the borderline
+        # pure-ML-text false positives.
+        has_hard_rule_signals = (
+            text_rule_score > 0.20
+            or url_rule_score > 0.20
+            or bool(deep_risks)
+            or adv_override
+            or url_final_score >= 0.35
+            or attachment_final_score >= 0.35
+        )
+
+        pre_dampener_score = ensemble_score
+        if sender_credibility >= 0.50 and not has_hard_rule_signals:
+            # Dampening factor: 0.50 credibility → 27.5% reduction
+            #                   0.70 credibility → 38.5% reduction
+            #                   0.90 credibility → 49.5% reduction
+            # Formula: dampener = 1.0 - (credibility * 0.55)
+            dampener = 1.0 - (sender_credibility * 0.55)
+            ensemble_score = ensemble_score * dampener
+            print(f"[Credibility Dampener] credibility={sender_credibility:.3f} "
+                  f"dampener={dampener:.3f} "
+                  f"score: {pre_dampener_score:.3f} → {ensemble_score:.3f}")
+        else:
+            if has_hard_rule_signals:
+                print(f"[Credibility Dampener] SKIPPED — hard rule signals present "
+                      f"(credibility={sender_credibility:.3f})")
+            else:
+                print(f"[Credibility Dampener] SKIPPED — low credibility domain "
+                      f"({sender_credibility:.3f} < 0.50)")
+
+        print(f"Ensemble Score (final): {ensemble_score:.3f}")
 
         # ADVANCED OVERRIDE: If a single advanced signal is very high-confidence,
         # classify as phishing regardless of the ML ensemble.
@@ -484,23 +588,27 @@ def hybrid_analyze_email(email_id, email_text, subject, model_loader):
             ensemble_score = 0.75
         
         # STEP 5: TRUST AND SAFETY ADJUSTMENTS
-        trusted_domains = ['gmail.com', 'google.com', 'microsoft.com', 'github.com', 'naukri.com', 'naukrigulf.com', 'infoedge.com']
+        # NOTE: The legacy hard-coded trusted_domains list is kept for known personal
+        # contacts only. Domain-level trust is now handled by the credibility dampener
+        # in STEP 4, which works for ANY established domain without a whitelist.
         trusted_contacts = ['samyakbhongade2019@gmail.com', 'rushabhkirad@gmail.com']
 
-        # BUG FIX #6: Use exact domain match (sender ends with @trusted_domain)
-        # Prevents spoofed domains like paypal-gmail.tk from getting a trust boost.
-        is_trusted = (
-            any(sender.endswith('@' + domain) or sender == domain for domain in trusted_domains)
-            or any(contact in sender for contact in trusted_contacts)
-        )
+        is_trusted_contact = any(contact in sender for contact in trusted_contacts)
+
+        # High-credibility sender: apply a final safety net for borderline scores.
+        # If credibility is high AND score is still borderline after dampening,
+        # push it below threshold to avoid false positives.
+        if sender_credibility >= 0.70 and 0.30 <= ensemble_score < 0.50 and not has_hard_rule_signals:
+            ensemble_score *= 0.65
+            print(f"High-credibility safety net applied: {ensemble_score:.3f}")
+
+        # Known personal contact: small additional reduction
+        if is_trusted_contact and ensemble_score < 0.60:
+            ensemble_score *= 0.5
+            print(f"Trusted contact adjustment: {ensemble_score:.3f}")
 
         safe_patterns = ['unsubscribe', 'newsletter', 'notification', 'receipt', 'invoice']
         has_safe_indicators = any(pattern in text_content for pattern in safe_patterns)
-
-        # Apply trust adjustments — only reduce if NOT already high-confidence phishing
-        if is_trusted and len(text_content.strip()) < 100 and ensemble_score < 0.60:
-            ensemble_score *= 0.3
-            print(f"Trusted sender adjustment: {ensemble_score:.3f}")
 
         # Safe-content indicators only reduce if score is borderline (not clearly phishing)
         if has_safe_indicators and ensemble_score < 0.50:

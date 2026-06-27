@@ -6,11 +6,11 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
 
-# Paths
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_PATH = os.path.join(BASE_DIR, "..", "data", "raw", "Final.csv")
-MODEL_PATH = os.path.join(BASE_DIR, "..", "models", "url_model.pkl")
-VECTORIZER_PATH = os.path.join(BASE_DIR, "..", "models", "url_vectorizer.pkl")
+# Paths — go up three levels from backend/analyzers/ to project root
+ROOT_DIR        = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_PATH       = os.path.join(ROOT_DIR, 'data', 'Final.csv')
+MODEL_PATH      = os.path.join(ROOT_DIR, 'models', 'url_model.pkl')
+VECTORIZER_PATH = os.path.join(ROOT_DIR, 'models', 'url_vectorizer.pkl')
 
 def load_data():
     df = pd.read_csv(DATA_PATH)

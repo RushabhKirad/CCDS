@@ -5,7 +5,7 @@ Uses the existing ModelLoader from backend
 """
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.db.db_utils import execute_query, fetch_one, fetch_all
 from backend.analyzers.model_loader import ModelLoader

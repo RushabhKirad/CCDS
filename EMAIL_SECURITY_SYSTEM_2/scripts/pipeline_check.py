@@ -3,7 +3,7 @@ Full Pipeline Diagnostic: Database → Ingestion → ML Analysis → Result
 Tests every stage of the email processing pipeline end-to-end.
 """
 import sys, os, traceback, datetime
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 PASS = "[OK]"
 FAIL = "[X]"
@@ -64,7 +64,7 @@ except Exception as e:
 print(f"\n{'STAGE 2: MODEL FILES ON DISK':^70}")
 print(sep)
 
-MODELS_DIR = os.path.join(os.path.dirname(__file__), 'models')
+MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
 model_files = {
     'text_phishing_model.pkl': 'Text Classifier',
     'vectorizer.pkl':          'Text TF-IDF Vectorizer',
@@ -280,7 +280,7 @@ print(sep)
 # mta_listener imports from app.py at runtime which is a circular import
 # when the listener is triggered from within app.py itself.
 import ast
-mta_path = os.path.join(os.path.dirname(__file__), 'backend', 'ingestion', 'mta_listener.py')
+mta_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend', 'ingestion', 'mta_listener.py')
 try:
     with open(mta_path) as f:
         src = f.read()

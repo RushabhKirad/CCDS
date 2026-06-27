@@ -10,7 +10,7 @@ from sklearn.metrics import (
 from datetime import datetime
 
 # Paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 PROCESSED_DIR = os.path.join(BASE_DIR, 'processed')
 CACHE_FILE = os.path.join(BASE_DIR, 'evaluation_results.json')
