@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insider Detection System</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <!-- Top Banner Glow -->
+    <div class="glow-bg"></div>
+
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <i class="fa-solid fa-shield-halved brand-icon"></i>
+                <div class="brand-text">
+                    <h1>Insider Detection System</h1>
+                    <p>Real-Time Behavioral Threat Detection & Endpoint Analytics</p>
+                </div>
+            </div>
+            <div class="system-status">
+                <div class="status-indicator online">
+                    <span class="pulse"></span>
+                    <span class="status-label">REAL-TIME MONITOR ACTIVE</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="navigation-tabs">
+            <button class="tab-btn active" data-tab="tab-research">
+                <i class="fa-solid fa-chart-line"></i> Research Hub
+            </button>
+            <button class="tab-btn" data-tab="tab-realtime">
+                <i class="fa-solid fa-tower-broadcast"></i> Production Monitor
+            </button>
+            <button class="tab-btn" data-tab="tab-admin">
+                <i class="fa-solid fa-lock"></i> Admin Config
+            </button>
+        </nav>
+    </header>
+
+    <main class="container">
+        <!-- TAB 1: RESEARCH HUB (Dataset Evaluation) -->
+        <section id="tab-research" class="tab-content active">
+            <div class="grid-layout">
+                <!-- Controls Column -->
+                <div class="controls-column">
+                    <div class="panel glass-card">
+                        <div class="panel-header">
+                            <i class="fa-solid fa-sliders text-cyan"></i>
+                            <h2>System Controls</h2>
+                        </div>
+                        <p class="panel-desc">Evaluate the ML models under simulated domain environments using CERT
+                            datasets.</p>
+
+                        <div class="form-group">
+                            <label for="dataset-select">Select Target Environment:</label>
+                            <select id="dataset-select">
+                                <option value="r42_train">CERT r4.2 (Training Baseline: Jan-Sep)</option>
+                                <option value="r42_test">CERT r4.2 (Standard Test: Oct-Dec)</option>
+                                <option value="r62">CERT r6.2 (Target Domain / Severe Concept Drift)</option>
+                            </select>
+                        </div>
+                        <button id="run-btn" class="primary-btn">
+                            <i class="fa-solid fa-play"></i> Run Detection Pipeline
+                        </button>
+
+                        <div id="loading" class="hidden">
+                            <div class="spinner"></div>
+                            <p>Analyzing features, calculating drift (PSI) & selecting model...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dashboard Column -->
+                <div class="dashboard-column">
+                    <!-- Metrics Summary -->
+                    <div class="panel glass-card hidden" id="metrics-panel">
+                        <div class="panel-header">
+                            <i class="fa-solid fa-gauge text-cyan"></i>
+                            <h2>Drift Analysis & Model State</h2>
+                        </div>
+                        <div class="metrics-grid">
+                            <div class="metric-card" id="card-drift">
+                                <h3>Global Feature Drift (PSI)</h3>
+                                <div class="value" id="drift-score">-</div>
+                                <div class="subtitle" id="drift-status">-</div>
+                            </div>
+                            <div class="metric-card" id="card-model">
+                                <h3>Active Detection Model</h3>
+                                <div class="value" id="model-name">-</div>
+                                <div class="subtitle" id="model-status">-</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Flagged Entities -->
+                    <div class="panel glass-card hidden" id="results-panel">
+                        <div class="panel-header">
+                            <i class="fa-solid fa-circle-exclamation text-amber"></i>
+                            <h2>Top Flagged Entities (from <span id="total-users">0</span> users)</h2>
+                        </div>
+                        <div class="table-container">
+                            <table id="results-table">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>User ID</th>
+                                        <th>Anomaly Score / Confidence</th>
+                                        <th>Threat Reasoning</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="results-tbody">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: PRODUCTION MONITOR (Real-Time Endpoint Alerts) -->
+        <section id="tab-realtime" class="tab-content">
+            <div class="realtime-layout">
+                <!-- Live Agent Status -->
+                <div class="agents-grid">
+                    <div class="agent-card glass-card">
+                        <div class="agent-icon bg-cyan">
+                            <i class="fa-solid fa-usb"></i>
+                        </div>
+                        <div class="agent-info">
+                            <h3>USB Device Agent</h3>
+                            <p class="status-active">Monitoring Windows HW Events</p>
+                        </div>
+                    </div>
+                    <div class="agent-card glass-card">
+                        <div class="agent-icon bg-purple">
+                            <i class="fa-solid fa-folder-tree"></i>
+                        </div>
+                        <div class="agent-info">
+                            <h3>File Restriction Agent</h3>
+                            <p class="status-active">Watchdog Path Watcher Active</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Event Stream & Notifications -->
+                <div class="panel glass-card">
+                    <div class="panel-header">
+                        <i class="fa-solid fa-network-wired text-red"></i>
+                        <h2>Real-Time Security Event Stream</h2>
+                        <div class="live-indicator">
+                            <span class="live-dot"></span> LIVE FEED
+                        </div>
+                    </div>
+                    <p class="panel-desc">Real-time alerts generated by endpoint device activities and file
+                        interactions.</p>
+
+                    <div class="stream-container" id="alert-stream">
+                        <!-- Events go here -->
+                        <div class="stream-placeholder">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <p>Waiting for endpoint events. Triggers are listening in the background...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: ADMIN CONFIGURATION PANEL -->
+        <section id="tab-admin" class="tab-content">
+            <!-- Login Form (Visible if not logged in) -->
+            <div class="login-wrapper" id="admin-login-panel">
+                <div class="panel glass-card login-card">
+                    <div class="panel-header">
+                        <i class="fa-solid fa-lock text-purple"></i>
+                        <h2>Admin Authentication</h2>
+                    </div>
+                    <p class="panel-desc">Access restriction list configurations and historical audit logs.</p>
+
+                    <div id="login-error" class="error-msg hidden"></div>
+
+                    <div class="form-group">
+                        <label for="admin-user">Username</label>
+                        <input type="text" id="admin-user">
+                    </div>
+                    <div class="form-group">
+                        <label for="admin-pass">Password</label>
+                        <input type="password" id="admin-pass">
+                    </div>
+                    <button id="login-btn" class="primary-btn purple-btn">Log In</button>
+                </div>
+            </div>
+
+            <!-- Configuration Console (Visible after login) -->
+            <div class="admin-dashboard hidden" id="admin-console">
+                <div class="admin-grid">
+                    <!-- Left Column: Directory restrictions & USB whitelisting -->
+                    <div class="admin-column" style="display: flex; flex-direction: column; gap: 2rem;">
+                        <!-- Panel 1: Restrictions Management -->
+                        <div class="panel glass-card">
+                            <div class="panel-header">
+                                <i class="fa-solid fa-ban text-red"></i>
+                                <h2>Restricted Directories / Files</h2>
+                            </div>
+                            <p class="panel-desc">Browse files and folders on your computer below. Click <strong>Restrict</strong> to dynamically add file or folder access alerts.</p>
+
+                            <!-- Visual Folder/File Manager Widget -->
+                            <div class="file-explorer" style="padding: 1rem; margin-bottom: 1.5rem; background: rgba(5, 7, 12, 0.6); border: 1px solid rgba(255,255,255,0.05); border-radius: 6px;">
+                                <div class="explorer-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; gap: 0.5rem;">
+                                    <div style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--color-cyan); word-break: break-all; flex: 1;" id="explorer-current-path">
+                                        C:\
+                                    </div>
+                                    <button id="explorer-up-btn" class="text-btn" style="white-space: nowrap; font-size: 0.8rem; display: flex; align-items: center; gap: 0.3rem;">
+                                        <i class="fa-solid fa-arrow-up"></i> Up
+                                    </button>
+                                </div>
+                                <div id="explorer-list" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; padding-right: 0.2rem;">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
+                            <div class="restrictions-list-wrapper">
+                                <ul id="restrictions-list">
+                                    <!-- Populated dynamically -->
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Panel 2: USB Device Whitelisting -->
+                        <div class="panel glass-card">
+                            <div class="panel-header">
+                                <i class="fa-solid fa-usb text-cyan"></i>
+                                <h2>USB Device Whitelisting</h2>
+                            </div>
+                            <p class="panel-desc">Whitelisted safe USB devices are allowed. Unrecognized connections will trigger security warning alerts.</p>
+
+                            <div style="margin-bottom: 1.2rem;">
+                                <h3 style="font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; color: var(--text-muted);">Safe USB Whitelist</h3>
+                                <div class="restrictions-list-wrapper" style="max-height: 150px;">
+                                    <ul id="safe-usbs-list">
+                                        <!-- Populated dynamically -->
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 style="font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; color: var(--text-muted);">Currently Connected USBs</h3>
+                                <div class="restrictions-list-wrapper" style="max-height: 150px;">
+                                    <ul id="detected-usbs-list">
+                                        <!-- Populated dynamically -->
+                                    </ul>
+                                </div>
+                                <button id="refresh-usb-btn" class="text-btn" style="margin-top: 0.8rem; display: flex; align-items: center; gap: 0.4rem;">
+                                    <i class="fa-solid fa-arrows-rotate"></i> Scan for USB Devices
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Audit Logs -->
+                    <div class="panel glass-card">
+                        <div class="panel-header">
+                            <i class="fa-solid fa-list-check text-cyan"></i>
+                            <h2>System Audit Logs</h2>
+                            <button id="clear-logs-btn" class="text-btn">Refresh</button>
+                        </div>
+                        <p class="panel-desc">Historical timeline of endpoint system triggers and security breaches.</p>
+
+                        <div class="audit-logs-wrapper">
+                            <table class="audit-table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Type</th>
+                                        <th>Severity</th>
+                                        <th>Message</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="audit-tbody">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Floating notifications wrapper -->
+    <div id="toast-wrapper"></div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

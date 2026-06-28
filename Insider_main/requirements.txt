@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pydantic
+scikit-learn
+pandas
+torch
+torch_geometric
+scipy
+matplotlib
+watchdog
+pywin32
