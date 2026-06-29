@@ -70,7 +70,7 @@ def run_gcn(df, x_scaled):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = GCN(in_channels=len(FEATURES)).to(device)
-    model.load_state_dict(torch.load(MODEL_WT, map_location=device))
+    model.load_state_dict(torch.load(MODEL_WT, map_location=device, weights_only=True))
     model.eval()
 
     x_tensor = torch.tensor(x_scaled, dtype=torch.float).to(device)

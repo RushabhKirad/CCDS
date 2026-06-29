@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2');
 const bcrypt = require('bcrypt');
@@ -5,81 +6,101 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
+// Environment config
+const JWT_SECRET = process.env.JWT_SECRET || 'cyber-defense-secret-key-2024';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// MySQL Database Connection - First connect without database
-const dbConnection = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'samarth@2904'
-});
-
-// Create database if not exists
-dbConnection.query('CREATE DATABASE IF NOT EXISTS cyber_defense_db', (err) => {
-    if (err) {
-        console.error('Error creating database:', err);
-    } else {
-        console.log('✅ Database cyber_defense_db ready');
-    }
-    dbConnection.end();
-});
-
-// Now connect to the specific database
+// MySQL Database Connection
 const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'samarth@2904',
-    database: 'cyber_defense_db'
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    multipleStatements: true
 });
 
-// Connect to database
+// Initialize database and tables
 db.connect((err) => {
     if (err) {
-        console.error('Database connection failed:', err);
-        return;
+        console.error('❌ Database connection failed:', err.message);
+        process.exit(1);
     }
-    console.log('✅ Connected to MySQL database');
-});
+    console.log('✅ Connected to MySQL');
 
-// Drop and recreate users table to ensure correct structure
-db.query('DROP TABLE IF EXISTS users', (err) => {
-    if (err) {
-        console.error('Error dropping users table:', err);
-    }
-    
-    const createUsersTable = `
-        CREATE TABLE users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            email VARCHAR(255) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-    `;
-    
-    db.query(createUsersTable, (err) => {
+    // Create database if not exists, then use it
+    const dbName = process.env.DB_NAME || 'cyber_defense_db';
+    db.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\`; USE \`${dbName}\`;`, (err) => {
         if (err) {
-            console.error('Error creating users table:', err);
-        } else {
-            console.log('✅ Users table created successfully');
+            console.error('❌ Database setup error:', err.message);
+            process.exit(1);
         }
+        console.log(`✅ Using database: ${dbName}`);
+
+        // Create users table only if it doesn't exist (preserves data across restarts)
+        const createUsersTable = `
+            CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        `;
+        db.query(createUsersTable, (err) => {
+            if (err) {
+                console.error('❌ Error creating users table:', err.message);
+            } else {
+                console.log('✅ Users table ready');
+            }
+        });
     });
 });
+
+// ─── JWT Authentication Middleware ────────────────────────────────────────────
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
+
+    if (!token) {
+        return res.status(401).json({ success: false, message: 'Access token required' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(403).json({ success: false, message: 'Invalid or expired token' });
+        }
+        req.user = decoded;
+        next();
+    });
+}
+
+// ─── Public Routes ───────────────────────────────────────────────────────────
 
 // Register endpoint
 app.post('/api/register', async (req, res) => {
     try {
         const { name, email, password } = req.body;
 
+        // Validate input
+        if (!name || !email || !password) {
+            return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
+        }
+
+        if (password.length < 6) {
+            return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+        }
+
         // Check if user already exists
-        const checkUser = 'SELECT * FROM users WHERE email = ?';
+        const checkUser = 'SELECT id FROM users WHERE email = ?';
         db.query(checkUser, [email], async (err, results) => {
             if (err) {
+                console.error('DB error checking user:', err.message);
                 return res.status(500).json({ success: false, message: 'Database error' });
             }
 
@@ -87,11 +108,6 @@ app.post('/api/register', async (req, res) => {
                 return res.status(400).json({ success: false, message: 'User already exists' });
             }
 
-            // Validate password exists
-            if (!password || password.length < 6) {
-                return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
-            }
-            
             // Hash password
             const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -99,18 +115,27 @@ app.post('/api/register', async (req, res) => {
             const insertUser = 'INSERT INTO users (name, email, password) VALUES (?, ?, ?)';
             db.query(insertUser, [name, email, hashedPassword], (err, result) => {
                 if (err) {
-                    console.error('Database insert error:', err);
-                    return res.status(500).json({ success: false, message: 'Failed to create user: ' + err.message });
+                    console.error('DB insert error:', err.message);
+                    return res.status(500).json({ success: false, message: 'Failed to create user' });
                 }
 
-                res.status(201).json({ 
-                    success: true, 
+                // Auto-generate token on registration so user is logged in immediately
+                const token = jwt.sign(
+                    { userId: result.insertId, email },
+                    JWT_SECRET,
+                    { expiresIn: JWT_EXPIRES_IN }
+                );
+
+                res.status(201).json({
+                    success: true,
                     message: 'User created successfully',
-                    userId: result.insertId 
+                    user: { id: result.insertId, name, email },
+                    token
                 });
             });
         });
     } catch (error) {
+        console.error('Register error:', error.message);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 });
@@ -120,10 +145,16 @@ app.post('/api/login', (req, res) => {
     try {
         const { email, password } = req.body;
 
+        // Validate input
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: 'Email and password are required' });
+        }
+
         // Find user by email
         const findUser = 'SELECT * FROM users WHERE email = ?';
         db.query(findUser, [email], async (err, results) => {
             if (err) {
+                console.error('DB error during login:', err.message);
                 return res.status(500).json({ success: false, message: 'Database error' });
             }
 
@@ -134,10 +165,6 @@ app.post('/api/login', (req, res) => {
             const user = results[0];
 
             // Check password
-            if (!password || !user.password) {
-                return res.status(401).json({ success: false, message: 'Invalid email or password' });
-            }
-            
             const isValidPassword = await bcrypt.compare(password, user.password);
             if (!isValidPassword) {
                 return res.status(401).json({ success: false, message: 'Invalid email or password' });
@@ -146,8 +173,8 @@ app.post('/api/login', (req, res) => {
             // Generate JWT token
             const token = jwt.sign(
                 { userId: user.id, email: user.email },
-                'cyber-defense-secret-key-2024',
-                { expiresIn: '24h' }
+                JWT_SECRET,
+                { expiresIn: JWT_EXPIRES_IN }
             );
 
             res.json({
@@ -162,10 +189,38 @@ app.post('/api/login', (req, res) => {
             });
         });
     } catch (error) {
+        console.error('Login error:', error.message);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 });
 
+// ─── Protected Routes (require valid JWT) ────────────────────────────────────
+
+// Get current user profile
+app.get('/api/me', authenticateToken, (req, res) => {
+    const findUser = 'SELECT id, name, email, created_at FROM users WHERE id = ?';
+    db.query(findUser, [req.user.userId], (err, results) => {
+        if (err) {
+            return res.status(500).json({ success: false, message: 'Database error' });
+        }
+        if (results.length === 0) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+        res.json({ success: true, user: results[0] });
+    });
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+    db.query('SELECT 1', (err) => {
+        if (err) {
+            return res.status(503).json({ status: 'unhealthy', database: 'disconnected' });
+        }
+        res.json({ status: 'healthy', database: 'connected', uptime: process.uptime() });
+    });
+});
+
+// ─── Start Server ────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

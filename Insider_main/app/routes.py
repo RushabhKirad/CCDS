@@ -18,6 +18,7 @@ from pipeline.watchers import (
 )
 import time
 import asyncio
+from collections import deque
 from typing import List
 import os
 
@@ -25,7 +26,7 @@ router = APIRouter()
 
 # Global states
 active_websockets: List[WebSocket] = []
-audit_logs = []
+audit_logs: deque = deque(maxlen=500)  # O(1) append, auto-drops oldest when full
 main_loop = None
 
 async def broadcast_alert(alert_event):
@@ -39,9 +40,7 @@ async def broadcast_alert(alert_event):
 
 def on_alert_received(alert_event):
     """Callback function triggered by background watchers when a security event happens."""
-    audit_logs.insert(0, alert_event)
-    if len(audit_logs) > 500:
-        audit_logs.pop()
+    audit_logs.appendleft(alert_event)  # O(1), deque auto-caps at 500
     
     # Schedule the broadcast on the main event loop thread-safely
     if main_loop and active_websockets:
@@ -112,18 +111,13 @@ async def websocket_alerts(websocket: WebSocket):
     await websocket.accept()
     active_websockets.append(websocket)
     try:
-        # Keep alive: send a ping every 20s so the connection stays open
-        # This prevents silent timeouts from proxies / browser idle limits.
+        # Keep alive: sleep 20s then send ping — client never sends data back
         while True:
+            await asyncio.sleep(20.0)
             try:
-                # Wait for a client message with a 20s timeout
-                await asyncio.wait_for(websocket.receive_text(), timeout=20.0)
-            except asyncio.TimeoutError:
-                # Send a ping frame to keep the connection alive
-                try:
-                    await websocket.send_json({"type": "ping", "timestamp": time.strftime("%H:%M:%S")})
-                except Exception:
-                    break
+                await websocket.send_json({"type": "ping", "timestamp": time.strftime("%H:%M:%S")})
+            except Exception:
+                break
     except WebSocketDisconnect:
         pass
     except Exception:
@@ -158,7 +152,7 @@ def remove_restriction(path: str):
 # Realtime alert logs route
 @router.get("/admin/logs")
 def get_audit_logs():
-    return {"logs": audit_logs}
+    return {"logs": list(audit_logs)}
 
 # Lightweight log count endpoint for efficient frontend polling
 @router.get("/admin/log-count")

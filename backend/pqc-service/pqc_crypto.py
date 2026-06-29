@@ -4,13 +4,14 @@ Post-Quantum Cryptography Module for CCDS
 Implements ML-KEM-768 (NIST FIPS 203) for quantum-resistant key exchange
 and AES-256-GCM for symmetric encryption of internal communications.
 
+Uses REAL post-quantum cryptography via pqcrypto.kem.ml_kem_768.
+
 Author: CCDS Team
 Standard: NIST FIPS 203 (ML-KEM-768)
 """
 
 import os
 import base64
-import hashlib
 import secrets
 from typing import Tuple, Dict, Optional
 
@@ -20,36 +21,17 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.backends import default_backend
 
-# Try to import PQC libraries
-PQC_AVAILABLE = False
-PQC_LIBRARY = "simulation"
+# Real PQC: ML-KEM-768 from pqcrypto library
+from pqcrypto.kem import ml_kem_768
 
-try:
-    # Import ML-KEM-768 from pqcrypto (correct module name)
-    from pqcrypto.kem import ml_kem_768
-    PQC_AVAILABLE = True
-    PQC_LIBRARY = "pqcrypto.ml_kem_768"
-    print("✅ Real PQC: Using pqcrypto.kem.ml_kem_768 (NIST FIPS 203)")
-except ImportError:
-    try:
-        # Fallback: Try liboqs (Open Quantum Safe)
-        import oqs as liboqs
-        if hasattr(liboqs, 'KeyEncapsulation'):
-            PQC_AVAILABLE = True
-            PQC_LIBRARY = "liboqs"
-            print("✅ Real PQC: Using liboqs (Open Quantum Safe)")
-    except (ImportError, AttributeError):
-        pass
-
-if not PQC_AVAILABLE:
-    print("⚠️ Using KEM-SIMULATION mode (structure compatible with ML-KEM-768)")
-    print("   Simulation mode preserves protocol flow but does not provide post-quantum security.")
-    print("   AES-256-GCM encryption is REAL and production-ready")
+print("✅ Real PQC: Using pqcrypto.kem.ml_kem_768 (NIST FIPS 203)")
 
 
 class MLKEMCrypto:
     """
-    ML-KEM-768 Key Encapsulation Mechanism
+    ML-KEM-768 Key Encapsulation Mechanism (Real PQC)
+    
+    Uses pqcrypto.kem.ml_kem_768 for genuine post-quantum security.
     
     Provides:
     - Key generation (public/secret keypair)
@@ -57,17 +39,16 @@ class MLKEMCrypto:
     - Decapsulation (recover shared secret from ciphertext)
     """
     
-    # Expected sizes for ML-KEM-768 (implementation-dependent, per NIST FIPS 203)
-    # These values are typical but may vary across library implementations
-    PUBLIC_KEY_SIZE = 1184  # bytes (expected)
-    SECRET_KEY_SIZE = 2400  # bytes (expected)
-    CIPHERTEXT_SIZE = 1088  # bytes (expected)
-    SHARED_SECRET_SIZE = 32  # bytes (standard)
+    # ML-KEM-768 sizes per NIST FIPS 203
+    PUBLIC_KEY_SIZE = 1184  # bytes
+    SECRET_KEY_SIZE = 2400  # bytes
+    CIPHERTEXT_SIZE = 1088  # bytes
+    SHARED_SECRET_SIZE = 32  # bytes
     
     def __init__(self):
-        self.library = PQC_LIBRARY
-        self.is_real_pqc = PQC_AVAILABLE
-        print(f"🔐 ML-KEM-768 initialized using: {self.library}")
+        self.library = "pqcrypto.ml_kem_768"
+        self.is_real_pqc = True
+        print(f"🔐 ML-KEM-768 initialized using: {self.library} (Real PQC)")
     
     def generate_keypair(self) -> Tuple[bytes, bytes]:
         """
@@ -76,22 +57,8 @@ class MLKEMCrypto:
         Returns:
             Tuple of (public_key, secret_key)
         """
-        if PQC_AVAILABLE and PQC_LIBRARY == "pqcrypto.ml_kem_768":
-            # Real PQC: ml_kem_768.generate_keypair() returns (pk, sk)
-            public_key, secret_key = ml_kem_768.generate_keypair()
-            return public_key, secret_key
-        elif PQC_AVAILABLE and PQC_LIBRARY == "liboqs":
-            # Use liboqs (Open Quantum Safe) library
-            import oqs
-            kem = oqs.KeyEncapsulation("ML-KEM-768")
-            public_key = kem.generate_keypair()
-            secret_key = kem.export_secret_key()
-            return public_key, secret_key
-        else:
-            # Simulation mode: Generate random keys of correct size
-            public_key = secrets.token_bytes(self.PUBLIC_KEY_SIZE)
-            secret_key = secrets.token_bytes(self.SECRET_KEY_SIZE)
-            return public_key, secret_key
+        public_key, secret_key = ml_kem_768.generate_keypair()
+        return public_key, secret_key
     
     def encapsulate(self, public_key: bytes) -> Tuple[bytes, bytes]:
         """
@@ -103,23 +70,8 @@ class MLKEMCrypto:
         Returns:
             Tuple of (ciphertext, shared_secret)
         """
-        if PQC_AVAILABLE and PQC_LIBRARY == "pqcrypto.ml_kem_768":
-            # Real PQC: ml_kem_768.encrypt(pk) returns (ciphertext, shared_secret)
-            ciphertext, shared_secret = ml_kem_768.encrypt(public_key)
-            return ciphertext, shared_secret
-        elif PQC_AVAILABLE and PQC_LIBRARY == "liboqs":
-            # Use liboqs for encapsulation
-            import oqs
-            kem = oqs.KeyEncapsulation("ML-KEM-768")
-            ciphertext, shared_secret = kem.encap_secret(public_key)
-            return ciphertext, shared_secret
-        else:
-            # Simulation: Generate deterministic shared secret from public key
-            shared_secret = hashlib.sha256(public_key + secrets.token_bytes(32)).digest()
-            ciphertext = secrets.token_bytes(self.CIPHERTEXT_SIZE)
-            # Store mapping for simulation decapsulation
-            self._sim_cache = {base64.b64encode(ciphertext).decode(): shared_secret}
-            return ciphertext, shared_secret
+        ciphertext, shared_secret = ml_kem_768.encrypt(public_key)
+        return ciphertext, shared_secret
     
     def decapsulate(self, ciphertext: bytes, secret_key: bytes) -> bytes:
         """
@@ -132,23 +84,8 @@ class MLKEMCrypto:
         Returns:
             The shared secret (32 bytes)
         """
-        if PQC_AVAILABLE and PQC_LIBRARY == "pqcrypto.ml_kem_768":
-            # Real PQC: ml_kem_768.decrypt(sk, ct) returns shared_secret
-            shared_secret = ml_kem_768.decrypt(secret_key, ciphertext)
-            return shared_secret
-        elif PQC_AVAILABLE and PQC_LIBRARY == "liboqs":
-            # Use liboqs for decapsulation
-            import oqs
-            kem = oqs.KeyEncapsulation("ML-KEM-768", secret_key)
-            shared_secret = kem.decap_secret(ciphertext)
-            return shared_secret
-        else:
-            # Simulation: Return cached shared secret
-            ct_b64 = base64.b64encode(ciphertext).decode()
-            if hasattr(self, '_sim_cache') and ct_b64 in self._sim_cache:
-                return self._sim_cache[ct_b64]
-            # If not in cache, derive from secret key (for separate instances)
-            return hashlib.sha256(secret_key + ciphertext).digest()
+        shared_secret = ml_kem_768.decrypt(secret_key, ciphertext)
+        return shared_secret
 
 
 class AESGCMCrypto:
@@ -412,12 +349,9 @@ def run_self_test() -> bool:
     print(f"  ✅ Shared secret (encaps): {shared_secret_enc.hex()[:32]}...")
     print(f"  ✅ Shared secret (decaps): {shared_secret_dec.hex()[:32]}...")
     
-    # Note: In simulation mode, secrets may not match due to separate instances
-    if mlkem.is_real_pqc:
-        assert shared_secret_enc == shared_secret_dec, "Shared secrets must match!"
-        print("  ✅ Shared secrets MATCH!")
-    else:
-        print("  ⚠️ Simulation mode - skipping secret match check")
+    # Real PQC: shared secrets MUST match
+    assert shared_secret_enc == shared_secret_dec, "Shared secrets must match!"
+    print("  ✅ Shared secrets MATCH (Real ML-KEM-768)!")
     
     # Test 3: AES-GCM Encryption/Decryption
     print("\n[Test 3] AES-256-GCM Encryption/Decryption...")

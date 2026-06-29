@@ -346,15 +346,15 @@ function loadModule(moduleName) {
 
     switch (moduleName) {
         case 'anomaly':
-            moduleUrl = 'http://localhost:8001';
-            moduleName_display = 'Anomaly Detection System ';
+            moduleUrl = 'http://localhost:5003';
+            moduleName_display = 'Anomaly Detection IDS System ';
             break;
         case 'phishing':
-            moduleUrl = 'http://localhost:5001';
+            moduleUrl = 'http://localhost:6050';
             moduleName_display = 'Phishing Detection System';
             break;
         case 'insider':
-            moduleUrl = 'http://localhost:5000';
+            moduleUrl = 'http://localhost:5050';
             moduleName_display = 'Insider Threat Detection System';
             break;
         default:

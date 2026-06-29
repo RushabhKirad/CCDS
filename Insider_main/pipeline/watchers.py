@@ -41,7 +41,9 @@ _restricted_paths = set()
 _restrictions_lock = threading.Lock()
 
 # Thread-safe tracker for active alerts to avoid duplicate spamming
-# Stores alert keys: (pid, normalized_path) for processes and (hwnd, normalized_path) for windows.
+# Keys: (pid, create_time, normalized_path) for processes — create_time ensures
+# a re-opened file (new process after kill) always fires a fresh alert.
+# (hwnd, normalized_path) for window-title hits.
 _active_alerts = set()
 _active_alerts_lock = threading.Lock()
 
@@ -236,9 +238,9 @@ def force_close_file_access(file_path):
     # First close attempt — immediate
     count = _do_close(file_path)
     
-    # Second pass after 800ms — catches apps that open a child process or viewer window on access
+    # Second pass after 300ms — catches apps that open a child process or viewer window on access
     def _retry_close():
-        time.sleep(0.8)
+        time.sleep(0.3)
         _do_close(file_path)
     threading.Thread(target=_retry_close, daemon=True).start()
 
@@ -370,15 +372,18 @@ def _decode_base64_cmdline(arg):
 
 
 def _fire_restriction_alert(proc_name, pid, file_path, action="Open"):
-    """Sends two notifications: system popup + admin portal WebSocket.
-    No auto-close — user is asked to close the file themselves.
-    """
+    """Kill the process first for fastest response, then send notifications."""
 
-    # 1. Admin portal WebSocket alert
+    # 1. Kill immediately — fastest possible response
+    force_close_file_access(file_path)
+
+    print(f"[ALERT] Restricted access blocked: '{file_path}' by '{proc_name}' (PID {pid})", flush=True)
+
+    # 2. Admin portal WebSocket alert
     trigger_alert(
         alert_type="file_restriction",
         severity="critical",
-        message=f"RESTRICTED ACCESS: '{proc_name}' opened restricted file '{os.path.basename(file_path)}'. Please close it immediately.",
+        message=f"RESTRICTED ACCESS: '{proc_name}' opened restricted file '{os.path.basename(file_path)}'. Access blocked.",
         details={
             "path": file_path,
             "process": proc_name,
@@ -387,17 +392,15 @@ def _fire_restriction_alert(proc_name, pid, file_path, action="Open"):
         }
     )
 
-    # 2. Topmost system popup — non-blocking (own thread)
+    # 3. Topmost system popup — non-blocking (own thread)
     show_user_notification(
         "\u26a0 Insider Detection System \u2014 Restricted File Access",
         f"WARNING: Restricted File Accessed!\n\n"
         f"Process : {proc_name} (PID {pid})\n"
         f"File    : {file_path}\n\n"
         f"This file is RESTRICTED.\n"
-        f"Please CLOSE it immediately."
+        f"Access has been blocked and the application closed."
     )
-
-    print(f"[ALERT] Restricted access notification sent for '{file_path}' opened by '{proc_name}' (PID {pid})", flush=True)
 
 
 def start_access_scanner():
@@ -436,20 +439,31 @@ def start_access_scanner():
     def scan_loop():
         import psutil
         global _clean_processes, _enum_windows_callback_ref
+        cycle_count = 0
+        heavy_scan_cycle = 0
 
         while not _stop_scanner.is_set():
             try:
-                # Debug logging to verify scanner loop is alive
-                # print("[SCANNER-DEBUG] Cycle start", flush=True)
-                
+                cycle_count += 1
+                if cycle_count >= 20:  # Clear clean process cache every ~4s (20 * 0.2s)
+                    _clean_processes.clear()
+                    cycle_count = 0
+
+                heavy_scan_cycle += 1
+                run_heavy_scan = False
+                if heavy_scan_cycle >= 2:  # Heavy psutil scan every 2 cycles = 0.4s (was 1.5s)
+                    run_heavy_scan = True
+                    heavy_scan_cycle = 0
+
                 # Clean up process cache for exited processes to prevent memory leak
-                try:
-                    active_pids = set(psutil.pids())
-                    for k in list(_clean_processes.keys()):
-                        if k not in active_pids:
-                            del _clean_processes[k]
-                except Exception:
-                    pass
+                if run_heavy_scan:
+                    try:
+                        active_pids = set(psutil.pids())
+                        for k in list(_clean_processes.keys()):
+                            if k[0] not in active_pids:
+                                del _clean_processes[k]
+                    except Exception:
+                        pass
 
                 # Snapshot current restricted paths
                 with _restrictions_lock:
@@ -461,24 +475,28 @@ def start_access_scanner():
                     # Normalize all restricted paths once per cycle
                     abs_restricted = [_normalize_user_path(r) for r in restricted]
 
-                    # Restricted filenames and map for window-title matching
-                    # If a folder is restricted, we also map all file names inside it.
+                    # Restricted filenames mapped to list of paths to resolve same-name collision (like secret.txt in multiple dirs)
                     restricted_name_map = {}
+                    def _add_to_name_map(fname, fpath):
+                        fname = fname.lower()
+                        if fname not in restricted_name_map:
+                            restricted_name_map[fname] = []
+                        if fpath not in restricted_name_map[fname]:
+                            restricted_name_map[fname].append(fpath)
+
                     for abs_r in abs_restricted:
                         if os.path.isdir(abs_r):
-                            # Map folder itself
-                            restricted_name_map[os.path.basename(abs_r).lower()] = abs_r
-                            # Map files inside it
+                            _add_to_name_map(os.path.basename(abs_r), abs_r)
                             try:
                                 for entry in os.scandir(abs_r):
                                     if entry.is_file():
-                                        restricted_name_map[entry.name.lower()] = entry.path
+                                        _add_to_name_map(entry.name, entry.path)
                             except Exception:
                                 pass
                         else:
                             name = os.path.basename(abs_r)
                             if name:
-                                restricted_name_map[name.lower()] = abs_r
+                                _add_to_name_map(name, abs_r)
 
                     # Set to collect alerts active in the current cycle
                     current_alerts = set()
@@ -500,16 +518,17 @@ def start_access_scanner():
                                         matched_name = None
                                         matched_path = None
                                         
-                                        for name, full_path in restricted_name_map.items():
+                                        paths_list = []
+                                        for name, paths in restricted_name_map.items():
                                             if name in title:
                                                 is_restricted_found = True
                                                 matched_name = name
-                                                matched_path = full_path
+                                                # Collect ALL paths for this name (same filename in multiple folders)
+                                                paths_list = paths
                                                 break
                                                 
-                                        if is_restricted_found:
+                                        if is_restricted_found and paths_list:
                                             # We prioritize matching restricted file access! Do not skip.
-                                            # Get actual process name if possible
                                             pname = "Window Application"
                                             pid_val = 0
                                             try:
@@ -520,6 +539,37 @@ def start_access_scanner():
                                                     pname = psutil.Process(pid.value).name()
                                             except Exception:
                                                 pass
+                                            
+                                            # Resolve same-named file path collision using process context
+                                            matched_path = paths_list[0]
+                                            if pid_val > 0:
+                                                try:
+                                                    # Check open files of the owning process
+                                                    p_proc = psutil.Process(pid_val)
+                                                    for f in p_proc.open_files():
+                                                        f_norm = _normalize_user_path(f.path)
+                                                        if f_norm in paths_list:
+                                                            matched_path = f_norm
+                                                            break
+                                                    
+                                                    # Fallback: check command line
+                                                    if matched_path == paths_list[0]:
+                                                        for arg in p_proc.cmdline():
+                                                            arg_norm = _normalize_user_path(arg)
+                                                            for p_item in paths_list:
+                                                                if p_item in arg_norm or arg_norm == p_item:
+                                                                    matched_path = p_item
+                                                                    break
+                                                except Exception:
+                                                    pass
+                                            
+                                            # If still not resolved, check folder context in title bar
+                                            if matched_path == paths_list[0] and len(paths_list) > 1:
+                                                for p_item in paths_list:
+                                                    parent_dir_name = os.path.basename(os.path.dirname(p_item)).lower()
+                                                    if parent_dir_name in title:
+                                                        matched_path = p_item
+                                                        break
                                                 
                                             alert_key = (hwnd, matched_path)
                                             current_alerts.add(alert_key)
@@ -549,7 +599,8 @@ def start_access_scanner():
                         ctypes.windll.user32.EnumWindows(_enum_windows_callback_ref, 0)
 
                     # ── LAYERS 1 & 2: Process Handles & Command Lines ──
-                    for proc in psutil.process_iter(['pid', 'name']):
+                    processes_to_scan = psutil.process_iter(['pid', 'name']) if run_heavy_scan else []
+                    for proc in processes_to_scan:
                         if _stop_scanner.is_set():
                             break
                         try:
@@ -563,8 +614,10 @@ def start_access_scanner():
                             except Exception:
                                 create_time = 0
 
-                            # Cache check
-                            if pid in _clean_processes and _clean_processes[pid] == create_time:
+                            # Cache key includes create_time so a new process reusing
+                            # the same PID after being killed is never incorrectly skipped
+                            cache_key = (pid, create_time)
+                            if cache_key in _clean_processes:
                                 continue
 
                             matched_path = None   # the restricted path that triggered
@@ -619,7 +672,9 @@ def start_access_scanner():
                                     pass
 
                             if matched_path:
-                                alert_key = (pid, matched_path)
+                                # Key includes create_time: re-open after kill (new PID or
+                                # same PID reused) always generates a fresh alert
+                                alert_key = (pid, create_time, _normalize_user_path(matched_path))
                                 current_alerts.add(alert_key)
 
                                 with _active_alerts_lock:
@@ -637,26 +692,35 @@ def start_access_scanner():
                                         )
                             else:
                                 if create_time > 0:
-                                    _clean_processes[pid] = create_time
+                                    _clean_processes[cache_key] = True
 
                         except (psutil.NoSuchProcess, psutil.AccessDenied,
                                 psutil.ZombieProcess):
                             continue
 
-                    # Update active alerts: keep only alerts still active in this cycle
-                    with _active_alerts_lock:
-                        _active_alerts.intersection_update(current_alerts)
+                    # Purge alert keys for processes that no longer exist
+                    if run_heavy_scan:
+                        try:
+                            active_pids = set(psutil.pids())
+                            with _active_alerts_lock:
+                                _active_alerts.difference_update(
+                                    {k for k in _active_alerts
+                                     if isinstance(k, tuple) and len(k) == 3
+                                     and k[0] not in active_pids}
+                                )
+                        except Exception:
+                            pass
 
             except Exception as e:
                 print(f"[SCANNER] Error in scan loop: {e}", flush=True)
 
-            # Wait for 0.3s or until woken up dynamically on restriction changes
-            _wake_scanner.wait(timeout=0.3)
+            # Wait for 0.2s or until woken by a restriction change
+            _wake_scanner.wait(timeout=0.2)
             _wake_scanner.clear()
 
     _scanner_thread = threading.Thread(target=scan_loop, daemon=True, name="AccessScanner")
     _scanner_thread.start()
-    print("Process Access Scanner started (open_files + cmdline + win32gui, 0.3s interval, clean process cache optimized).", flush=True)
+    print("Process Access Scanner started (open_files + cmdline + win32gui, 0.4s heavy scan, re-open detection fixed).", flush=True)
 
 
 def stop_access_scanner():
@@ -667,8 +731,11 @@ def start_file_watcher():
     """Starts both the psutil access scanner (primary) and watchdog (secondary)."""
     load_restricted_paths()
 
-    # --- PRIMARY: psutil process scanner ---
-    start_access_scanner()
+    # Guard against double-start on uvicorn reload
+    if _scanner_thread is not None and _scanner_thread.is_alive():
+        print("Access scanner already running, skipping re-start.", flush=True)
+    else:
+        start_access_scanner()
 
     # --- SECONDARY: watchdog for file write/create/delete events ---
     try:
@@ -708,7 +775,7 @@ def start_file_watcher():
                                 trigger_alert(
                                     alert_type="file_restriction",
                                     severity="critical",
-                                    message=f"RESTRICTED ACCESS: File '{os.path.basename(event_path)}' was {event.event_type}. Please close it immediately.",
+                                    message=f"RESTRICTED ACCESS: File '{os.path.basename(event_path)}' was {event.event_type}. Access blocked.",
                                     details={
                                         "path": event_path,
                                         "action": event.event_type.capitalize()
@@ -720,8 +787,9 @@ def start_file_watcher():
                                     f"File    : {event_path}\n"
                                     f"Action  : {event.event_type.upper()}\n\n"
                                     f"This file is RESTRICTED.\n"
-                                    f"Please CLOSE it immediately."
+                                    f"Access has been blocked."
                                 )
+                                force_close_file_access(event_path)
                             break
 
         global _file_observer, _file_observer_watches, _file_observer_event_handler

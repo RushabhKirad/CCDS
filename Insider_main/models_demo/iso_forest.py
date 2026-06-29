@@ -1,16 +1,25 @@
 try:
     from sklearn.ensemble import IsolationForest
+    import joblib
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
 import numpy as np
+import os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_PKL = os.path.join(BASE_DIR, "models", "isolation_forest.pkl")
 
 def run_iso_forest(df, x_scaled):
     if SKLEARN_AVAILABLE:
-        iso = IsolationForest(n_estimators=100, contamination=0.001, random_state=42, n_jobs=-1)
-        iso.fit(x_scaled)
-        # Return anomaly scores, higher is more anomalous
-        scores = -iso.decision_function(x_scaled)
+        # Load saved model if available, otherwise fit a new one
+        if os.path.exists(MODEL_PKL):
+            iso = joblib.load(MODEL_PKL)
+            scores = -iso.decision_function(x_scaled)
+        else:
+            iso = IsolationForest(n_estimators=100, contamination=0.001, random_state=42, n_jobs=-1)
+            iso.fit(x_scaled)
+            scores = -iso.decision_function(x_scaled)
     else:
         print("Warning: scikit-learn is not installed. Using simulated Isolation Forest model.")
         # Simulate Isolation Forest scores (random scores around 0.1 - 0.5, with anomalies having higher scores)

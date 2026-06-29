@@ -1,23 +1,3 @@
-"""
-run.py
-======
-The ONLY entry point for the Email Security System.
-
-Usage:
-    python run.py                       # development (DEBUG=True)
-    FLASK_ENV=production python run.py  # production  (DEBUG=False)
-    PORT=8080 python run.py             # custom port
-
-What this does:
-    1. Loads configuration (.env + environment variables)
-    2. Initialises the database (creates tables if missing)
-    3. Loads the app object from app.py
-    4. Starts the Flask development server
-
-For production deployment use Gunicorn / uWSGI instead:
-    gunicorn -w 4 -b 0.0.0.0:5000 "app:app"
-"""
-
 import os
 import sys
 
@@ -49,7 +29,7 @@ except Exception as e:
     print("[DB] The app will still start; some features may be unavailable.")
 
 # ── 5. Startup banner ──────────────────────────────────────────────────────────
-port  = int(os.getenv('PORT', 5000))
+port  = int(os.getenv('PORT', 6050))
 host  = os.getenv('HOST', '0.0.0.0')
 debug = app.config.get('DEBUG', True)
 

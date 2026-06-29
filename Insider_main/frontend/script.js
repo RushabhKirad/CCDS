@@ -294,6 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.onopen = () => {
             wsConnected = true;
             console.log("SIEM WebSocket connection established.");
+            fetchExistingLogsToStream();
         };
 
         socket.onmessage = (event) => {
@@ -312,6 +313,45 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.onerror = (err) => {
             console.error("WebSocket error:", err);
         };
+    }
+
+    async function fetchExistingLogsToStream() {
+        try {
+            const res = await fetch('/admin/logs');
+            const data = await res.json();
+            if (data.logs && data.logs.length > 0) {
+                // Clear placeholder
+                const placeholder = alertStream.querySelector('.stream-placeholder');
+                if (placeholder) {
+                    placeholder.remove();
+                }
+                
+                // Clear current stream to avoid duplicating
+                alertStream.innerHTML = '';
+                
+                // Populate alert stream
+                data.logs.forEach(alert => {
+                    const logEl = document.createElement('div');
+                    logEl.className = `event-log ev-${alert.type}`;
+                    
+                    const detailsHtml = alert.details && Object.keys(alert.details).length 
+                        ? `<div class="log-details">${JSON.stringify(alert.details)}</div>` 
+                        : '';
+                        
+                    logEl.innerHTML = `
+                        <div class="log-meta">
+                            <span class="log-time">[${alert.timestamp}]</span>
+                            <span class="log-tag ${alert.severity}">${alert.type.replace('_', ' ')} (${alert.severity})</span>
+                        </div>
+                        <div class="log-msg">${alert.message}</div>
+                        ${detailsHtml}
+                    `;
+                    alertStream.appendChild(logEl);
+                });
+            }
+        } catch (e) {
+            console.error("Error fetching initial logs:", e);
+        }
     }
 
     function handleIncomingAlert(alert) {
@@ -483,6 +523,18 @@ document.addEventListener('DOMContentLoaded', () => {
             adminConsole.classList.add('hidden');
         }
     }
+
+    // Allow pressing Enter in input fields to log in
+    const loginInputs = [document.getElementById('admin-user'), document.getElementById('admin-pass')];
+    loginInputs.forEach(input => {
+        if (input) {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    loginBtn.click();
+                }
+            });
+        }
+    });
 
     loginBtn.addEventListener('click', async () => {
         const username = document.getElementById('admin-user').value;

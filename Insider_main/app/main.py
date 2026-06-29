@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
 import sys
@@ -26,30 +27,50 @@ app.add_middleware(
 # API Routes
 app.include_router(router)
 
-# Start and Stop Realtime watchers on app events
+# Start and Stop Realtime watchers using lifespan events
 import asyncio
 from app import routes as app_routes
 from pipeline.watchers import start_usb_watcher, start_file_watcher, stop_usb_watcher, stop_file_watcher
+from contextlib import asynccontextmanager
 
-@app.on_event("startup")
-async def startup_event():
-    # Save reference to main loop for websocket async execution in threads
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     app_routes.main_loop = asyncio.get_running_loop()
-    # Start watchers in threads
     start_usb_watcher()
     start_file_watcher()
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    # Stop thread loops
+    yield
     stop_usb_watcher()
     stop_file_watcher()
 
-# Mount frontend to serve vanilla HTML/JS directly
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+app.router.lifespan_context = lifespan
+
+# Serve frontend files under /static and expose index.html at root
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+@app.get("/")
+async def root():
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="127.0.0.1", port=5050, reload=True)
+
+    def start_server(host: str, port: int):
+        uvicorn.run(
+            "app.main:app",
+            host=host,
+            port=port,
+            reload=True,
+            reload_dirs=["app", "pipeline", "models_demo", "models", "src"]
+        )
+
+    default_port = int(os.getenv("PORT", "5050"))
+    try:
+        start_server("127.0.0.1", default_port)
+    except OSError as exc:
+        if exc.errno == 10048 or "address already in use" in str(exc).lower():
+            fallback_port = default_port + 1
+            print(f"Port {default_port} is already in use. Falling back to port {fallback_port}.")
+            start_server("127.0.0.1", fallback_port)
+        else:
+            raise
 

@@ -157,11 +157,10 @@ def generate_explanations(df_eval, top_users, features):
         feature_deviations = {}
 
         for f_name, z_score, raw_val, avg_val in feature_scores:
-            if z_score < ZSCORE_THRESHOLD and len(reasons) > 0:
-                # Stop if below threshold and we have at least one reason
-                break
             if len(reasons) >= MAX_REASONS:
                 break
+            if z_score < ZSCORE_THRESHOLD:
+                continue
 
             tmpl = FEATURE_TEMPLATES.get(f_name)
             if tmpl is None:

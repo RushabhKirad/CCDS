@@ -1,4 +1,6 @@
 import os
+import time
+import tracemalloc
 import binascii
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -112,5 +114,144 @@ def get_crypto_demo_data(username, password):
                 "ct_size": f"{len(p_ct)} Bytes (Encapsulation)",
                 "quantum_safe": "YES (Lattice-Based)"
             }
+        }
+    }
+
+
+# --- Benchmarking: Latency, Scalability & Computational Overhead ---
+
+def _bench(fn, iterations):
+    """Run fn() for `iterations` times, return (avg_ms, peak_kb, ops_per_sec)."""
+    tracemalloc.start()
+    start = time.perf_counter()
+    for _ in range(iterations):
+        fn()
+    elapsed = time.perf_counter() - start
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    avg_ms     = (elapsed / iterations) * 1000   # ms per operation
+    peak_kb    = peak / 1024                     # KB peak memory
+    ops_per_sec = iterations / elapsed           # throughput
+    return round(avg_ms, 4), round(peak_kb, 2), round(ops_per_sec, 2)
+
+
+def get_benchmark_data(iterations=50):
+    """
+    Benchmark ML-KEM-768 (Kyber) vs ECDH across:
+      - Key-exchange latency  (keygen / encaps / decaps per step)
+      - Scalability           (full handshakes per second)
+      - Computational overhead (peak memory, key/ciphertext sizes)
+    """
+
+    # ── ML-KEM-768 ────────────────────────────────────────────────────────────
+    kyber_kg_ms,  kyber_kg_kb,  kyber_kg_ops  = _bench(
+        lambda: ml_kem_768.generate_keypair(), iterations)
+
+    _pk, _sk = ml_kem_768.generate_keypair()
+    kyber_enc_ms, kyber_enc_kb, kyber_enc_ops = _bench(
+        lambda: ml_kem_768.encrypt(_pk), iterations)
+
+    _ct, _ = ml_kem_768.encrypt(_pk)
+    kyber_dec_ms, kyber_dec_kb, kyber_dec_ops = _bench(
+        lambda: ml_kem_768.decrypt(_sk, _ct), iterations)
+
+    def _kyber_full():
+        pk, sk = ml_kem_768.generate_keypair()
+        ct, _  = ml_kem_768.encrypt(pk)
+        ml_kem_768.decrypt(sk, ct)
+
+    kyber_full_ms, kyber_full_kb, kyber_full_ops = _bench(_kyber_full, iterations)
+
+    # ── ECDH ──────────────────────────────────────────────────────────────────
+    ecdh_kg_ms,  ecdh_kg_kb,  ecdh_kg_ops  = _bench(
+        lambda: ec.generate_private_key(ec.SECP256R1(), default_backend()), iterations)
+
+    _c_priv = ec.generate_private_key(ec.SECP256R1(), default_backend())
+    _s_pub  = ec.generate_private_key(ec.SECP256R1(), default_backend()).public_key()
+    ecdh_exc_ms, ecdh_exc_kb, ecdh_exc_ops = _bench(
+        lambda: _c_priv.exchange(ec.ECDH(), _s_pub), iterations)
+
+    def _ecdh_full():
+        cp = ec.generate_private_key(ec.SECP256R1(), default_backend())
+        sp = ec.generate_private_key(ec.SECP256R1(), default_backend())
+        cp.exchange(ec.ECDH(), sp.public_key())
+
+    ecdh_full_ms, ecdh_full_kb, ecdh_full_ops = _bench(_ecdh_full, iterations)
+
+    # ── Static sizes ──────────────────────────────────────────────────────────
+    pk, sk  = ml_kem_768.generate_keypair()
+    ct, ss  = ml_kem_768.encrypt(pk)
+    c_priv  = ec.generate_private_key(ec.SECP256R1(), default_backend())
+    c_pub_b = c_priv.public_key().public_bytes(
+                  serialization.Encoding.X962,
+                  serialization.PublicFormat.UncompressedPoint)
+
+    overhead_pct = round(((kyber_full_ms - ecdh_full_ms) / ecdh_full_ms) * 100, 1)
+
+    return {
+        "iterations": iterations,
+
+        # ── Latency (ms / operation) ──────────────────────────────────────────
+        "latency": {
+            "kyber": {
+                "keygen_ms":         kyber_kg_ms,
+                "encapsulate_ms":    kyber_enc_ms,
+                "decapsulate_ms":    kyber_dec_ms,
+                "full_handshake_ms": kyber_full_ms,
+            },
+            "ecdh": {
+                "keygen_ms":         ecdh_kg_ms,
+                "exchange_ms":       ecdh_exc_ms,
+                "full_handshake_ms": ecdh_full_ms,
+            },
+            "faster":       "ECDH" if ecdh_full_ms < kyber_full_ms else "ML-KEM-768",
+            "overhead_pct": overhead_pct,
+            "note": (
+                f"ML-KEM-768 full handshake is {overhead_pct}% "
+                f"{'slower' if overhead_pct > 0 else 'faster'} than ECDH."
+            )
+        },
+
+        # ── Scalability (handshakes / second) ─────────────────────────────────
+        "scalability": {
+            "kyber_full_ops_per_sec":  kyber_full_ops,
+            "ecdh_full_ops_per_sec":   ecdh_full_ops,
+            "kyber_keygen_ops_per_sec":  kyber_kg_ops,
+            "kyber_encaps_ops_per_sec":  kyber_enc_ops,
+            "kyber_decaps_ops_per_sec":  kyber_dec_ops,
+            "sessions_per_min_single_core": int(kyber_full_ops * 60),
+            "note": (
+                f"ML-KEM-768 handles ~{kyber_full_ops:.0f} full handshakes/sec "
+                f"(~{int(kyber_full_ops * 60):,} sessions/min) on a single core."
+            )
+        },
+
+        # ── Computational / Memory Overhead ───────────────────────────────────
+        "overhead": {
+            "kyber": {
+                "pk_bytes":               len(pk),
+                "sk_bytes":               len(sk),
+                "ct_bytes":               len(ct),
+                "shared_secret_bytes":    len(ss),
+                "keygen_peak_kb":         kyber_kg_kb,
+                "encapsulate_peak_kb":    kyber_enc_kb,
+                "decapsulate_peak_kb":    kyber_dec_kb,
+                "full_handshake_peak_kb": kyber_full_kb,
+            },
+            "ecdh": {
+                "pk_bytes":               len(c_pub_b),
+                "sk_bytes":               32,
+                "ct_bytes":               "N/A",
+                "shared_secret_bytes":    32,
+                "keygen_peak_kb":         ecdh_kg_kb,
+                "exchange_peak_kb":       ecdh_exc_kb,
+                "full_handshake_peak_kb": ecdh_full_kb,
+            },
+            "pk_size_ratio": round(len(pk) / len(c_pub_b), 1),
+            "note": (
+                f"ML-KEM-768 public key is {round(len(pk)/len(c_pub_b),1)}x larger "
+                f"than ECDH ({len(pk)} B vs {len(c_pub_b)} B) — "
+                "the accepted cost of quantum safety."
+            )
         }
     }

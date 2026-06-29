@@ -1331,7 +1331,7 @@ def health_check():
         'status': 'healthy',
         'service': 'email-security-system',
         'version': '1.0.0',
-        'port': 5001
+        'port': 6050
     })
 
 @app.route("/service_status")
