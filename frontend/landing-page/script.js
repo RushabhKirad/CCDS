@@ -335,7 +335,9 @@ document.querySelectorAll('.modal').forEach(modal => {
 
 // Module Loading Function
 function loadModule(moduleName) {
-    if (!currentUser) {
+    // Check both currentUser and authToken — prevents manually cleared state
+    const token = localStorage.getItem('authToken');
+    if (!currentUser || !token) {
         showNotification('Please login to access this module');
         openLoginModal();
         return;
