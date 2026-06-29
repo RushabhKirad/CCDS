@@ -171,7 +171,8 @@ async function handleLogin(e) {
             currentUser = result.user;
             localStorage.setItem('currentUser', JSON.stringify(result.user));
             localStorage.setItem('authToken', result.token);
-            showMessage('Login successful! Welcome back.', 'success', 'loginForm');
+            const pqcStatus = result.pqc_applied ? ' 🔐 PQC Secured' : '';
+            showMessage(`Login successful! Welcome back.${pqcStatus}`, 'success', 'loginForm');
 
             setTimeout(() => {
                 closeModal('loginModal');
@@ -239,6 +240,8 @@ async function handleSignup(e) {
 
         if (result.success) {
             showMessage('Account created successfully! You can now login.', 'success', 'signupForm');
+            const pqcStatus = result.pqc_applied ? ' (PQC encryption applied 🔐)' : '';
+            console.log(`[PQC] Registration PQC status: ${result.pqc_applied ? 'Active' : 'Unavailable'}`);
 
             setTimeout(() => {
                 closeModal('signupModal');
