@@ -506,18 +506,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const explorerUpBtn = document.getElementById('explorer-up-btn');
     const explorerList = document.getElementById('explorer-list');
 
-    let adminToken = null;
+    let adminToken = sessionStorage.getItem('adminToken');
     let currentExplorerPath = 'C:\\';
 
     function checkAdminAuth() {
         if (adminToken) {
             loginPanel.classList.add('hidden');
             adminConsole.classList.remove('hidden');
-            loadRestrictions();
-            loadAuditLogs();
-            loadSafeUsbs();
-            loadDetectedUsbs();
-            loadExplorer(currentExplorerPath);
+            // Small delay ensures the panel is visible before populating lists
+            setTimeout(() => {
+                loadRestrictions();
+                loadAuditLogs();
+                loadSafeUsbs();
+                loadDetectedUsbs();
+                loadExplorer(currentExplorerPath);
+            }, 50);
         } else {
             loginPanel.classList.remove('hidden');
             adminConsole.classList.add('hidden');
@@ -552,6 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (data.success) {
                 adminToken = data.token;
+                sessionStorage.setItem('adminToken', data.token);
                 showToast('info', 'Auth Success', 'Admin logged in.');
                 checkAdminAuth();
             } else {
@@ -863,6 +867,17 @@ document.addEventListener('DOMContentLoaded', () => {
         loadAuditLogs();
         showToast('info', 'Logs Refreshed', 'System audit logs updated from server.');
     });
+
+    // Logout: clear session and show login form again
+    const logoutBtn = document.getElementById('admin-logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            adminToken = null;
+            sessionStorage.removeItem('adminToken');
+            checkAdminAuth();
+            showToast('info', 'Logged Out', 'Admin session ended.');
+        });
+    }
 
     // Check auth on load
     checkAdminAuth();

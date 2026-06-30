@@ -5,12 +5,15 @@ from fastapi.staticfiles import StaticFiles
 import os
 import sys
 
-# Insert project root to sys.path to enable 'app' package resolving when running main.py directly
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Always resolve paths relative to this file — works from any working directory
+FILE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(FILE_DIR)
 
+# Insert project root so 'app', 'pipeline', etc. resolve correctly
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 from app.routes import router
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 
 app = FastAPI(title="Insider Detection System")
@@ -60,7 +63,7 @@ if __name__ == "__main__":
             host=host,
             port=port,
             reload=True,
-            reload_dirs=["app", "pipeline", "models_demo", "models", "src"]
+            reload_dirs=[BASE_DIR]
         )
 
     default_port = int(os.getenv("PORT", "5050"))

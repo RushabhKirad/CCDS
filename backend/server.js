@@ -16,7 +16,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'cyber-defense-secret-key-2024';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: ['http://localhost:8000', 'http://127.0.0.1:8000'],
+    credentials: true
+}));
 app.use(express.json());
 
 // ── PQC Helper: encrypt data via PQC service ──────────────────────────────────
@@ -83,9 +86,18 @@ db.connect((err) => {
                 console.error('❌ Error creating users table:', err.message);
             } else {
                 console.log('✅ Users table ready');
-                // Add PQC columns if upgrading from old table
-                db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pqc_session_id VARCHAR(255) DEFAULT NULL`, () => {});
-                db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pqc_applied TINYINT(1) DEFAULT 0`, () => {});
+                // Add PQC columns if upgrading from old table (safe check for MySQL compatibility)
+                db.query(`SHOW COLUMNS FROM users LIKE 'pqc_session_id'`, (e, rows) => {
+                    if (!e && rows.length === 0) {
+                        db.query(`ALTER TABLE users ADD COLUMN pqc_session_id VARCHAR(255) DEFAULT NULL`, () => {});
+                    }
+                });
+                db.query(`SHOW COLUMNS FROM users LIKE 'pqc_applied'`, (e, rows) => {
+                    if (!e && rows.length === 0) {
+                        db.query(`ALTER TABLE users ADD COLUMN pqc_applied TINYINT(1) DEFAULT 0`, () => {});
+                    }
+                });
+                console.log('✅ PQC columns verified');
             }
         });
     });

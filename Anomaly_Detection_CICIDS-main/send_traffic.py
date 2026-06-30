@@ -16,7 +16,7 @@ import argparse, time, json
 import numpy as np
 import urllib.request
 
-API_URL   = 'http://localhost:5000/api/detect'
+API_URL   = 'http://localhost:5003/api/detect'
 CACHE     = 'data/processed/cicids/cicids_arrays.npz'
 
 
@@ -153,7 +153,7 @@ def main():
             break
         # Once the batch is complete, the next batch starts immediately (no extra interval needed)
 
-    print("\n[Done] Check your dashboard at http://localhost:5000")
+    print("\n[Done] Check your dashboard at http://localhost:5003")
 
 
 if __name__ == '__main__':

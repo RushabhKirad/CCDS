@@ -1,0 +1,10 @@
+◇ injected env (7) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+🚀 Server running on http://localhost:3000
+✅ Connected to MySQL
+✅ Using database: cyber_defense_db
+✅ Users table ready
+✅ PQC columns verified
+[PQC] Register - session initiated: vUHf1sKk-XiJkkT0ogEQ0A
+[PQC] Login - session initiated: jjVK6V68HGAXhdNGGfhLbQ
+[PQC] Register - session initiated: V1R3bp3AFJBJc3oDtTQ9jg
+[PQC] Login - session initiated: BXHENejJr8SxJeT521RaXg
