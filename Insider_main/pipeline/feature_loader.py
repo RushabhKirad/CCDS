@@ -9,17 +9,13 @@ except ImportError:
         def __init__(self):
             self.mean_ = None
             self.scale_ = None
-            
         def fit(self, X):
             self.mean_ = np.mean(X, axis=0)
             self.scale_ = np.std(X, axis=0)
-            # Prevent division by zero
             self.scale_[self.scale_ == 0] = 1.0
             return self
-            
         def transform(self, X):
             return (X - self.mean_) / self.scale_
-            
         def fit_transform(self, X):
             return self.fit(X).transform(X)
 
@@ -28,38 +24,49 @@ R42_PATH = os.path.join(BASE_DIR, "data", "processed", "user_day_dataframe_r42.c
 R62_PATH = os.path.join(BASE_DIR, "data", "processed", "user_day_dataframe_v62.csv")
 
 FEATURES = [
-    "logon_count", "after_hours_flag", "unique_pc_count", 
+    "logon_count", "after_hours_flag", "unique_pc_count",
     "usb_connect_count", "usb_disconnect_count", "usb_first_time_flag",
-    "files_copied", "exe_copied_flag", 
+    "files_copied", "exe_copied_flag",
     "emails_sent", "external_email_ratio",
     "http_visit_count", "job_site_visits", "suspicious_url_visits"
 ]
 
-def load_dataset(dataset_name: str):
-    """
-    Loads raw dataframe and returns it along with raw features and a standard scaler.
-    """
-    if dataset_name == "r42_train":
+# ── Module-level cache: load each dataset once per server lifetime ─────────────
+_cache: dict = {}
+
+def _load_r42_raw():
+    """Load and parse r4.2 CSV once, cache it."""
+    if "r42_raw" not in _cache:
         df = pd.read_csv(R42_PATH)
         df["date_dt"] = pd.to_datetime(df["date"])
+        _cache["r42_raw"] = df
+    return _cache["r42_raw"]
+
+def load_dataset(dataset_name: str):
+    if dataset_name == "r42_train":
+        df = _load_r42_raw()
         df = df[df["date_dt"] < pd.to_datetime("2010-09-30")].reset_index(drop=True)
     elif dataset_name == "r42_test":
-        df = pd.read_csv(R42_PATH)
-        df["date_dt"] = pd.to_datetime(df["date"])
+        df = _load_r42_raw()
         df = df[df["date_dt"] >= pd.to_datetime("2010-09-30")].reset_index(drop=True)
     elif dataset_name == "r62":
-        df = pd.read_csv(R62_PATH)
+        if "r62" not in _cache:
+            _cache["r62"] = pd.read_csv(R62_PATH)
+        df = _cache["r62"]
     else:
         raise ValueError("Invalid dataset.")
-        
-    scaler = StandardScaler()
-    x_scaled = scaler.fit_transform(df[FEATURES].values)
-    
+
+    key = f"scaled_{dataset_name}"
+    if key not in _cache:
+        scaler = StandardScaler()
+        _cache[key] = scaler.fit_transform(df[FEATURES].values)
+    x_scaled = _cache[key]
+
     return df, x_scaled
-    
+
 def get_r42_train_df():
-    # Helper to get the baseline reference data used for PSI
-    df = pd.read_csv(R42_PATH)
-    df["date_dt"] = pd.to_datetime(df["date"])
-    # Return chronologically split train subset
-    return df[df["date_dt"] < pd.to_datetime("2010-09-30")]
+    """Returns r4.2 train split (used for PSI baseline). Cached."""
+    if "r42_train_df" not in _cache:
+        df = _load_r42_raw()
+        _cache["r42_train_df"] = df[df["date_dt"] < pd.to_datetime("2010-09-30")]
+    return _cache["r42_train_df"]

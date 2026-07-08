@@ -41,6 +41,19 @@ async def lifespan(app: FastAPI):
     app_routes.main_loop = asyncio.get_running_loop()
     start_usb_watcher()
     start_file_watcher()
+    # Pre-load all datasets into cache so first /run-detection is instant
+    import threading
+    def _warm():
+        try:
+            from pipeline.feature_loader import load_dataset, get_r42_train_df
+            load_dataset("r42_train")
+            load_dataset("r42_test")
+            load_dataset("r62")
+            get_r42_train_df()
+            print("[CACHE] All datasets pre-loaded.", flush=True)
+        except Exception as e:
+            print(f"[CACHE] Warm-up error: {e}", flush=True)
+    threading.Thread(target=_warm, daemon=True).start()
     yield
     stop_usb_watcher()
     stop_file_watcher()

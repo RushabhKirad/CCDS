@@ -21,6 +21,9 @@ import asyncio
 from collections import deque
 from typing import List
 import os
+from concurrent.futures import ThreadPoolExecutor
+
+_executor = ThreadPoolExecutor(max_workers=2)
 
 router = APIRouter()
 
@@ -50,48 +53,35 @@ def on_alert_received(alert_event):
 register_alert_callback(on_alert_received)
 
 @router.post("/run-detection", response_model=DetectionResponse)
-def run_detection(request: DetectionRequest):
+async def run_detection(request: DetectionRequest):
     ds_name = request.dataset
     if ds_name not in ["r42_train", "r42_test", "r62"]:
         raise HTTPException(status_code=400, detail="Invalid dataset.")
 
-    # 1. Load data
-    df, x_scaled = load_dataset(ds_name)
-    
-    # 2. Compute drift
-    # (If r42 vs r42, drift will be functionally ~0)
-    drift_results = compute_dataset_drift(df)
-    global_psi = drift_results["global_psi"]
-    
-    # 3. Model Decision
-    model_name = select_model(global_psi)
-    
-    # 4. Run Model
-    if model_name == "IsolationForest":
-        top_users, total_users, df_eval = run_iso_forest(df, x_scaled)
-    else:
-        top_users, total_users, df_eval = run_gcn(df, x_scaled)
+    def _run():
+        df, x_scaled = load_dataset(ds_name)
+        drift_results = compute_dataset_drift(df)
+        global_psi = drift_results["global_psi"]
+        model_name = select_model(global_psi)
+        if model_name == "IsolationForest":
+            top_users, total_users, df_eval = run_iso_forest(df, x_scaled)
+        else:
+            top_users, total_users, df_eval = run_gcn(df, x_scaled)
+        explanations = generate_explanations(df_eval, top_users, FEATURES)
+        enriched_users = [
+            {**u, "reasons": e["reasons"], "top_features": e["top_features"], "feature_deviations": e["feature_deviations"]}
+            for u, e in zip(top_users, explanations)
+        ]
+        return DetectionResponse(
+            drift_score=global_psi,
+            model_used=model_name,
+            top_users=enriched_users,
+            total_users=total_users,
+            feature_names=FEATURES
+        )
 
-    # 5. Generate explanations for flagged users
-    explanations = generate_explanations(df_eval, top_users, FEATURES)
-
-    # 6. Merge explanation data into each user result
-    enriched_users = []
-    for user_entry, explanation in zip(top_users, explanations):
-        enriched_users.append({
-            **user_entry,
-            "reasons": explanation["reasons"],
-            "top_features": explanation["top_features"],
-            "feature_deviations": explanation["feature_deviations"],
-        })
-
-    return DetectionResponse(
-        drift_score=global_psi,
-        model_used=model_name,
-        top_users=enriched_users,
-        total_users=total_users,
-        feature_names=FEATURES
-    )
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_executor, _run)
 
 @router.get("/drift-report", response_model=DriftReportResponse)
 def drift_report(dataset: str = "r62"):
@@ -118,7 +108,7 @@ async def websocket_alerts(websocket: WebSocket):
                 await websocket.send_json({"type": "ping", "timestamp": time.strftime("%H:%M:%S")})
             except Exception:
                 break
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     except Exception:
         pass
